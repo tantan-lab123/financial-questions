@@ -107,15 +107,11 @@
               </div>
               <div class="form-group span-2">
                 <label for="p1_address">כתובת מגורים <span class="required">*</span></label>
-                <input type="text" id="p1_address" name="partner1[address]" placeholder="רחוב, מספר, עיר" required>
+                <textarea id="p1_address" name="partner1[address]" placeholder="רחוב, מספר, עיר" required rows="1"></textarea>
               </div>
               <div class="form-group">
                 <label for="p1_age">גיל <span class="required">*</span></label>
                 <input type="number" id="p1_age" name="partner1[age]" min="18" max="120" required>
-              </div>
-              <div class="form-group checkbox-group">
-                <input type="checkbox" id="p1_is_self_employed" name="partner1[is_self_employed]" class="custom-checkbox">
-                <label for="p1_is_self_employed">אני עצמאי/ת</label>
               </div>
             </div>
           </fieldset>
@@ -142,15 +138,11 @@
               </div>
               <div class="form-group span-2">
                 <label for="p2_address">כתובת מגורים (אם שונה)</label>
-                <input type="text" id="p2_address" name="partner2[address]" placeholder="רחוב, מספר, עיר">
+                <textarea id="p2_address" name="partner2[address]" placeholder="רחוב, מספר, עיר" rows="1"></textarea>
               </div>
               <div class="form-group">
                 <label for="p2_age">גיל</label>
                 <input type="number" id="p2_age" name="partner2[age]" min="18" max="120">
-              </div>
-              <div class="form-group checkbox-group">
-                <input type="checkbox" id="p2_is_self_employed" name="partner2[is_self_employed]" class="custom-checkbox">
-                <label for="p2_is_self_employed">עצמאי/ת</label>
               </div>
             </div>
           </fieldset>
@@ -205,7 +197,8 @@
                     <th>שם</th>
                     <th>מין</th>
                     <th>גיל</th>
-                    <th>הערות וצרכים כלכליים (חוגים, חינוך מיוחד, בריאות, צרכים מיוחדים)</th>
+                    <th>הערות וצרכים כלכליים (חוגים, צהרונים וכו')</th>
+                    <th>הערות כלליות (צרכים מיוחדים וכו')</th>
                     <th class="col-actions">פעולות</th>
                   </tr>
                 </thead>
@@ -219,7 +212,10 @@
           <!-- Dynamic Close Financial Circle Table -->
           <div class="table-section">
             <div class="table-header">
-              <h3>מעגל כלכלי קרוב (הורים, בני משפחה התלויים בכם או שיכולים לעזור)</h3>
+              <div>
+                <h3>מעגל כלכלי קרוב</h3>
+                <span class="table-subtitle" style="font-size: 0.85rem; color: var(--color-text-muted); display: block; margin-top: 4px;">(לפרט אם יש יחסי גומלין כלכליים או השפעה הדדית פוטנציאלית)</span>
+              </div>
               <button type="button" class="btn-secondary add-row-btn" data-table="circleTable">
                 <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 הוסף קרוב משפחה
@@ -232,8 +228,8 @@
                     <th>למי קרוב? (בן זוג 1 / 2)</th>
                     <th>יחס קרבה</th>
                     <th>מצב כלכלי (1-10)</th>
-                    <th>האם יכול לעזור? (1-10)</th>
-                    <th>האם צריך עזרה? (1-10)</th>
+                    <th>האם הקרוב יכול לעזור? (1-10)</th>
+                    <th>האם הקרוב צריך עזרה? (1-10)</th>
                     <th>העברת נכסים בין-דורית (סכום משוער בש"ח)</th>
                     <th>הערות</th>
                     <th class="col-actions">פעולות</th>
@@ -251,7 +247,8 @@
       <!-- ================= STEP 2 ================= -->
       <section class="form-step" id="step2">
         <div class="section-card">
-          <h2>שלב 2: הכנסות והוצאות (תזרים חודשי)</h2>
+          <h2>שלב 2: תזרים חודשי</h2>
+          <h3 class="step-subheading" style="margin-bottom: 25px; font-size: 1.3rem; color: var(--color-primary-dark); border-bottom: 1.5px dashed var(--color-border); padding-bottom: 8px;">הכנסות</h3>
 
           <!-- Partner 1 Income -->
           <fieldset class="partner-fieldset">
@@ -259,23 +256,30 @@
             <div class="form-grid">
               <div class="form-group">
                 <label for="p1_job_title">מקום עבודה / עיסוק / תפקיד</label>
-                <input type="text" id="p1_job_title" name="income1[job_title]" placeholder="למשל: מהנדס תוכנה בחברת הייטק">
+                <textarea id="p1_job_title" name="income1[job_title]" placeholder="למשל: מהנדס תוכנה בחברת הייטק" rows="1"></textarea>
               </div>
               <div class="form-group">
-                <label for="p1_employee_income">הכנסה נטו כשכיר (ממוצע חודשי בש"ח)</label>
+                <label for="p1_employment_type">סוג תעסוקה</label>
+                <select id="p1_employment_type" name="partner1[employment_type]">
+                  <option value="employee" selected>שכיר/ה</option>
+                  <option value="self_employed">עצמאי/ת</option>
+                </select>
+              </div>
+              <div class="form-group" id="p1_employee_income_container">
+                <label for="p1_employee_income">הכנסה נטו כשכיר (ממוצע 3 חודשים אחרונים בש"ח)</label>
                 <input type="number" id="p1_employee_income" name="income1[employee_income]" min="0" placeholder="0">
               </div>
-              <div class="form-group">
+              <div class="form-group" id="p1_bonuses_container">
                 <label for="p1_bonuses">בונוסים ומענקים שנתיים (במונחים שנתיים בש"ח)</label>
                 <input type="number" id="p1_bonuses" name="income1[bonuses]" min="0" placeholder="0">
               </div>
-              <div class="form-group">
-                <label for="p1_self_employed_income">הכנסה נטו כעצמאי (ממוצע חודשי בש"ח)</label>
+              <div class="form-group hidden" id="p1_self_employed_income_container">
+                <label for="p1_self_employed_income">הכנסה נטו כעצמאי (ממוצע 3 חודשים אחרונים בש"ח) <span style="font-weight: normal; font-size: 0.85rem; color: var(--color-text-muted);">* להיעזר ברו"ח/יועץ מס לקביעת הנטו</span></label>
                 <input type="number" id="p1_self_employed_income" name="income1[self_employed_income]" min="0" placeholder="0">
               </div>
               <div class="form-group span-2">
                 <label for="p1_previous_jobs">מקומות עבודה קודמים (בשנתיים האחרונות - רלוונטי ליציבות)</label>
-                <input type="text" id="p1_previous_jobs" name="income1[previous_jobs]" placeholder="מקום עבודה, תקופה, שכר">
+                <textarea id="p1_previous_jobs" name="income1[previous_jobs]" placeholder="מקום עבודה, תקופה, שכר" rows="1"></textarea>
               </div>
               <div class="form-group span-3">
                 <label for="p1_income_notes">הערות על הכנסות בן/בת זוג 1</label>
@@ -290,23 +294,30 @@
             <div class="form-grid">
               <div class="form-group">
                 <label for="p2_job_title">מקום עבודה / עיסוק / תפקיד</label>
-                <input type="text" id="p2_job_title" name="income2[job_title]" placeholder="למשל: מורה במשרד החינוך">
+                <textarea id="p2_job_title" name="income2[job_title]" placeholder="למשל: מורה במשרד החינוך" rows="1"></textarea>
               </div>
               <div class="form-group">
-                <label for="p2_employee_income">הכנסה נטו כשכיר (ממוצע חודשי בש"ח)</label>
+                <label for="p2_employment_type">סוג תעסוקה</label>
+                <select id="p2_employment_type" name="partner2[employment_type]">
+                  <option value="employee" selected>שכיר/ה</option>
+                  <option value="self_employed">עצמאי/ת</option>
+                </select>
+              </div>
+              <div class="form-group" id="p2_employee_income_container">
+                <label for="p2_employee_income">הכנסה נטו כשכיר (ממוצע 3 חודשים אחרונים בש"ח)</label>
                 <input type="number" id="p2_employee_income" name="income2[employee_income]" min="0" placeholder="0">
               </div>
-              <div class="form-group">
+              <div class="form-group" id="p2_bonuses_container">
                 <label for="p2_bonuses">בונוסים ומענקים שנתיים (במונחים שנתיים בש"ח)</label>
                 <input type="number" id="p2_bonuses" name="income2[bonuses]" min="0" placeholder="0">
               </div>
-              <div class="form-group">
-                <label for="p2_self_employed_income">הכנסה נטו כעצמאי (ממוצע חודשי בש"ח)</label>
+              <div class="form-group hidden" id="p2_self_employed_income_container">
+                <label for="p2_self_employed_income">הכנסה נטו כעצמאי (ממוצע 3 חודשים אחרונים בש"ח) <span style="font-weight: normal; font-size: 0.85rem; color: var(--color-text-muted);">* להיעזר ברו"ח/יועץ מס לקביעת הנטו</span></label>
                 <input type="number" id="p2_self_employed_income" name="income2[self_employed_income]" min="0" placeholder="0">
               </div>
               <div class="form-group span-2">
                 <label for="p2_previous_jobs">מקומות עבודה קודמים (בשנתיים האחרונות - רלוונטי ליציבות)</label>
-                <input type="text" id="p2_previous_jobs" name="income2[previous_jobs]" placeholder="מקום עבודה, תקופה, שכר">
+                <textarea id="p2_previous_jobs" name="income2[previous_jobs]" placeholder="מקום עבודה, תקופה, שכר" rows="1"></textarea>
               </div>
               <div class="form-group span-3">
                 <label for="p2_income_notes">הערות על הכנסות בן/בת זוג 2</label>
@@ -341,21 +352,47 @@
             </div>
           </div>
 
-          <!-- Family Expenses -->
-          <fieldset class="expenses-fieldset">
-            <legend>הוצאות המשפחה</legend>
-            <div class="form-grid">
-              <div class="form-group">
-                <label for="total_monthly_expenses">סכום תזרימי חודשי כולל מוערך (בש"ח) <span class="required">*</span></label>
-                <input type="number" id="total_monthly_expenses" name="expenses[total_amount]" min="0" placeholder="למשל: 15000" required>
-                <span class="helper-text">יש לכלול מזון, דיור (שכירות/משכנתא), חינוך, רכב, פנאי וכו'</span>
-              </div>
-              <div class="form-group span-2">
-                <label for="expenses_details">פירוט הוצאות עיקריות, הערות והבהרות</label>
-                <textarea id="expenses_details" name="expenses[details]" rows="3" placeholder="פרט כאן סעיפים כבדים או חריגים כגון: שכירות/משכנתא גבוהה במיוחד, טיפולים רפואיים קבועים, תשלומים מיוחדים וכו'"></textarea>
-              </div>
+          <!-- Family Expenses Table -->
+          <div class="table-section">
+            <h3 class="step-subheading" style="margin-bottom: 25px; font-size: 1.3rem; color: var(--color-primary-dark); border-bottom: 1.5px dashed var(--color-border); padding-bottom: 8px; margin-top: 40px;">הוצאות</h3>
+            <div class="info-box">
+              <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <span><strong>איך משיגים ריכוז הוצאות מדויק?</strong> מומלץ להיכנס לאתר הבנק שלכם ולאתרי חברות כרטיסי האשראי, ולהפיק דו"ח ריכוז הוצאות או פירוט תנועות של 3 החודשים האחרונים. רוב הבנקים וחברות האשראי מציגים כיום באזור האישי כלים אוטומטיים וגרפים המנתחים ומחלקים את ההוצאות שלכם לפי קטגוריות באופן אוטומטי.</span>
             </div>
-          </fieldset>
+            
+            <div class="table-header">
+              <h3>פירוט הוצאות המשפחה (ממוצע 3 חודשים אחרונים)</h3>
+              <button type="button" class="btn-secondary add-row-btn" data-table="expensesTable">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                הוסף סעיף הוצאה
+              </button>
+            </div>
+            <div class="responsive-table-wrapper">
+              <table id="expensesTable" class="dynamic-table">
+                <thead>
+                  <tr>
+                    <th>הוצאות</th>
+                    <th>חודש 1 (ש"ח)</th>
+                    <th>חודש 2 (ש"ח)</th>
+                    <th>חודש 3 (ש"ח)</th>
+                    <th>ממוצע (ש"ח)</th>
+                    <th>הערות</th>
+                    <th class="col-actions">פעולות</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Rows added dynamically -->
+                </tbody>
+              </table>
+            </div>
+            <div class="table-total-bar">
+              <span>סך הכל הוצאות חודשיות מחושב: <strong><span id="computedTotalExpenses">0</span> ש"ח</strong></span>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -395,6 +432,14 @@
 
           <!-- Mortgage Details (From sheet) -->
           <div class="table-section">
+            <div class="info-box">
+              <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <span><strong>איך משיגים דו"ח סילוקין עדכני?</strong> דו"ח סילוקין הוא מסמך רשמי מהבנק המפרט את יתרת ההלוואה הנותרת לסילוק המשכנתא שלכם. ניתן להפיק אותו בקלות דרך האזור האישי באתר או באפליקציית הבנק שלכם, או בבקשה מול פקיד המשכנתאות בסניף.</span>
+            </div>
             <div class="table-header">
               <h3>פירוט משכנתאות קיימות (לפי דו"ח סילוקין עדכני)</h3>
               <button type="button" class="btn-secondary add-row-btn" data-table="mortgageTable">
@@ -439,7 +484,12 @@
                   <tr>
                     <th>יצרן ודגם</th>
                     <th>שנת ייצור</th>
-                    <th>שווי שוק נוכחי (ש"ח)</th>
+                    <th>
+                      שווי שוק נוכחי (לפי לוי יצחק בש"ח)
+                      <span class="tooltip-trigger">*
+                        <span class="tooltip-box">כדי לקבל את שווי השוק העדכני של הרכב שלכם, היכנסו לאתר 'לוי יצחק', הזינו את פרטי הרכב המדויקים (דגם, שנת ייצור וחודש עלייה לכביש) וקבלו את הערכת השווי הרשמית.</span>
+                      </span>
+                    </th>
                     <th>הערות (בבעלות/ליסינג, הלוואה על הרכב)</th>
                     <th class="col-actions">פעולות</th>
                   </tr>
@@ -462,39 +512,62 @@
             </div>
           </fieldset>
 
-          <!-- Bank & Credit Cards -->
-          <fieldset class="assets-fieldset">
-            <legend>חשבונות בנק וכרטיסי אשראי</legend>
-            <div class="form-grid">
-              <div class="form-group">
-                <label for="bank_name">שם הבנק / סניף</label>
-                <input type="text" id="bank_name" name="bank[name]" placeholder="למשל: לאומי סניף 800">
-              </div>
-              <div class="form-group">
-                <label for="bank_owner">בעלי החשבון</label>
-                <input type="text" id="bank_owner" name="bank[owner]" placeholder="למשל: משותף / בן זוג 1">
-              </div>
-              <div class="form-group">
-                <label for="bank_limit">מסגרת עו"ש מאושרת (בש"ח)</label>
-                <input type="number" id="bank_limit" name="bank[limit]" min="0" placeholder="0">
-              </div>
-              <div class="form-group">
-                <label for="bank_usage">שימוש עיקרי בחשבון</label>
-                <input type="text" id="bank_usage" name="bank[usage]" placeholder="למשל: חשבון משפחתי ראשי / עסק">
-              </div>
-              <div class="form-group">
-                <label for="bank_restricted">האם החשבון הוגבל או עמד בפני קשיים בעבר? <span class="required">*</span></label>
-                <select id="bank_restricted" name="bank[restricted]" required>
-                  <option value="no">לא</option>
-                  <option value="yes">כן</option>
-                </select>
-              </div>
-              <div class="form-group span-3">
-                <label for="credit_cards_details">פירוט כרטיסי אשראי (גופים מנפיקים, מסגרות אשראי וגובה ניצול ממוצע)</label>
-                <textarea id="credit_cards_details" name="bank[credit_cards_details]" rows="2" placeholder="למשל: כרטיס ויזה כאל מסגרת 15,000, שימוש ממוצע 8,000. מאסטרקארד שופרסל מסגרת 10,000..."></textarea>
-              </div>
+          <!-- Bank & Credit Cards Table -->
+          <div class="table-section">
+            <div class="table-header">
+              <h3>חשבונות בנק</h3>
+              <button type="button" class="btn-secondary add-row-btn" data-table="bankAccountsTable">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                הוסף חשבון בנק
+              </button>
             </div>
-          </fieldset>
+            <div class="responsive-table-wrapper">
+              <table id="bankAccountsTable" class="dynamic-table">
+                <thead>
+                  <tr>
+                    <th>שם הבנק והסניף</th>
+                    <th>בעלי החשבון</th>
+                    <th>מסגרת עו"ש מאושרת (ש"ח)</th>
+                    <th>למה משתמשים בחשבון?</th>
+                    <th>הוגבל בעבר?</th>
+                    <th class="col-actions">פעולות</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Rows added dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Credit Cards Table -->
+          <div class="table-section">
+            <div class="table-header">
+              <h3>כרטיסי אשראי</h3>
+              <button type="button" class="btn-secondary add-row-btn" data-table="creditCardsTable">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                הוסף כרטיס אשראי
+              </button>
+            </div>
+            <div class="responsive-table-wrapper">
+              <table id="creditCardsTable" class="dynamic-table">
+                <thead>
+                  <tr>
+                    <th>בעל הכרטיס</th>
+                    <th>שם הכרטיס</th>
+                    <th>4 ספרות אחרונות</th>
+                    <th>מסגרת (ש"ח)</th>
+                    <th>למה משמש הכרטיס?</th>
+                    <th>הערות...</th>
+                    <th class="col-actions">פעולות</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Rows added dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
 
           <!-- Financial Assets -->
           <div class="table-section">
@@ -596,82 +669,53 @@
       <!-- ================= STEP 4 ================= -->
       <section class="form-step" id="step4">
         <div class="section-card">
-          <h2>שלב 4: פנסיה, ביטוחים ומקרים מיוחדים</h2>
+          <h2>שלב 4: פנסיה וחיסכון ארוך טווח (לפי המסלקה הפנסיונית), ביטוחים ומקרים מיוחדים</h2>
 
-          <!-- Partner 1 Pension -->
-          <fieldset class="partner-fieldset">
-            <legend>נתוני קרן פנסיה / ביטוח מנהלים: בן/בת זוג 1</legend>
-            <div class="form-grid">
-              <div class="form-group">
-                <label for="p1_pension_company">שם הקרן / חברה מנהלת</label>
-                <input type="text" id="p1_pension_company" name="pension1[company]" placeholder="למשל: אלטשולר שחם / מגדל">
-              </div>
-              <div class="form-group">
-                <label for="p1_pension_balance">סכום הוני צבור נוכחי (בש"ח)</label>
-                <input type="number" id="p1_pension_balance" name="pension1[balance]" min="0" placeholder="0">
-              </div>
-              <div class="form-group">
-                <label for="p1_pension_deposit">סכום הפקדה חודשי ממוצע (בש"ח)</label>
-                <input type="number" id="p1_pension_deposit" name="pension1[monthly_deposit]" min="0" placeholder="0">
-              </div>
-              <div class="form-group">
-                <label for="p1_pension_has_life_insurance">רכיב ביטוח חיים מובנה בקרן?</label>
-                <select id="p1_pension_has_life_insurance" name="pension1[has_life_insurance]">
-                  <option value="yes">כן (שארים)</option>
-                  <option value="no">לא</option>
-                  <option value="unknown">לא ידוע</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label for="p1_pension_coefficient">מקדם קצבה צפוי (אם ידוע)</label>
-                <input type="number" id="p1_pension_coefficient" name="pension1[annuity_coefficient]" step="0.1" min="0" placeholder="למשל: 200">
-              </div>
-              <div class="form-group span-3">
-                <label for="p1_pension_notes">הערות על הפנסיה (בן/בת זוג 1)</label>
-                <textarea id="p1_pension_notes" name="pension1[notes]" rows="2" placeholder="למשל: מסלול השקעה מנייתי, צפי להגדלת הפקדות וכו'"></textarea>
-              </div>
-            </div>
-          </fieldset>
+          <!-- Pension Clearinghouse Info Box -->
+          <div class="info-box">
+            <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <span><strong>איך משיגים את נתוני הפנסיה?</strong>כדי לקבל תמונת מצב מלאה על כל החסכונות הפנסיוניים שלכם, היכנסו לאתר 'המסלקה הפנסיונית' (https://www.swiftness.co.il). לאחר הרשמה קצרה והזדהות מאובטחת, המערכת תפיק עבורכם דו"ח ריכוז נתונים שמרכז את כל קרנות הפנסיה, קופות הגמל וביטוחי המנהלים שלכם במקום אחד.</span>
+          </div>
 
-          <!-- Partner 2 Pension -->
-          <fieldset class="partner-fieldset">
-            <legend>נתוני קרן פנסיה / ביטוח מנהלים: בן/בת זוג 2</legend>
-            <div class="form-grid">
-              <div class="form-group">
-                <label for="p2_pension_company">שם הקרן / חברה מנהלת</label>
-                <input type="text" id="p2_pension_company" name="pension2[company]" placeholder="למשל: הראל / הפניקס">
-              </div>
-              <div class="form-group">
-                <label for="p2_pension_balance">סכום הוני צבור נוכחי (בש"ח)</label>
-                <input type="number" id="p2_pension_balance" name="pension2[balance]" min="0" placeholder="0">
-              </div>
-              <div class="form-group">
-                <label for="p2_pension_deposit">סכום הפקדה חודשי ממוצע (בש"ח)</label>
-                <input type="number" id="p2_pension_deposit" name="pension2[monthly_deposit]" min="0" placeholder="0">
-              </div>
-              <div class="form-group">
-                <label for="p2_pension_has_life_insurance">רכיב ביטוח חיים מובנה בקרן?</label>
-                <select id="p2_pension_has_life_insurance" name="pension2[has_life_insurance]">
-                  <option value="yes">כן (שארים)</option>
-                  <option value="no">לא</option>
-                  <option value="unknown">לא ידוע</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label for="p2_pension_coefficient">מקדם קצבה צפוי (אם ידוע)</label>
-                <input type="number" id="p2_pension_coefficient" name="pension2[annuity_coefficient]" step="0.1" min="0" placeholder="למשל: 200">
-              </div>
-              <div class="form-group span-3">
-                <label for="p2_pension_notes">הערות על הפנסיה (בן/בת זוג 2)</label>
-                <textarea id="p2_pension_notes" name="pension2[notes]" rows="2" placeholder="הערות שונות על הפנסיה של בן זוג 2..."></textarea>
-              </div>
+          <!-- Combined Pensions Table -->
+          <div class="table-section">
+            <div class="table-header">
+              <h3>חסכונות פנסיוניים וביטוחי מנהלים</h3>
+              <button type="button" class="btn-secondary add-row-btn" data-table="pensionsTable">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                הוסף חיסכון פנסיוני
+              </button>
             </div>
-          </fieldset>
+            <div class="responsive-table-wrapper">
+              <table id="pensionsTable" class="dynamic-table">
+                <thead>
+                  <tr>
+                    <th>שייך למי?</th>
+                    <th>שם הקרן / חברה מנהלת</th>
+                    <th>ביטוח מנהלים?</th>
+                    <th>סכום הוני נוכחי (ש"ח)</th>
+                    <th>סכום הפקדה חודשי (ש"ח)</th>
+                    <th>ביטוח חיים (בביטוח מנהלים)</th>
+                    <th>מקדם קצבה (בביטוח מנהלים)</th>
+                    <th>הערות</th>
+                    <th class="col-actions">פעולות</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Rows added dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
 
           <!-- Allowances Table -->
           <div class="table-section">
             <div class="table-header">
-              <h3>קצבאות (פנסיה ממקור אחר, ביטוח לאומי - נכות, ילדים, אבטלה וכדומה)</h3>
+              <h3>קצבאות (פנסיה ממקור אחר, ביטוח לאומי)</h3>
               <button type="button" class="btn-secondary add-row-btn" data-table="allowancesTable">
                 <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 הוסף קצבה
@@ -682,6 +726,7 @@
                 <thead>
                   <tr>
                     <th>שם הקצבה / מקור</th>
+                    <th>מי מקבל?</th>
                     <th>גובה הקצבה החודשית (ש"ח)</th>
                     <th>הערות (קבועה, זמנית - מועד סיום)</th>
                     <th class="col-actions">פעולות</th>
@@ -708,7 +753,7 @@
                 <thead>
                   <tr>
                     <th>סוג הביטוח (חיים, בריאות, סיעוד, תאונות, מחלות קשות)</th>
-                    <th>עבור מי בקבוצת המשפחה?</th>
+                    <th>של מי?</th>
                     <th>חברה מנהלת</th>
                     <th>פרמיה חודשית (ש"ח) / סכום כיסוי</th>
                     <th>שם סוכן הביטוח</th>
@@ -725,6 +770,25 @@
 
           <!-- ================= CONDITIONAL SECTIONS ================= -->
 
+          <!-- Conditional Section Toggles -->
+          <div class="conditional-toggles-section">
+            <h3>סמנו במידה ורלוונטי אליכם (יציג שדות מילוי נוספים למטה):</h3>
+            <div class="conditional-toggles-grid">
+              <div class="toggle-card">
+                <input type="checkbox" id="toggle_single_parent" name="toggles[single_parent]" class="custom-checkbox">
+                <label for="toggle_single_parent">משפחה חד-הורית</label>
+              </div>
+              <div class="toggle-card">
+                <input type="checkbox" id="toggle_second_marriage" name="toggles[second_marriage]" class="custom-checkbox">
+                <label for="toggle_second_marriage">משפחה פרק ב'</label>
+              </div>
+              <div class="toggle-card">
+                <input type="checkbox" id="toggle_self_employed" name="toggles[self_employed]" class="custom-checkbox">
+                <label for="toggle_self_employed">עצמאיים</label>
+              </div>
+            </div>
+          </div>
+
           <!-- Conditional: Single Parent (חד הוריות) -->
           <fieldset id="conditional_single_parent" class="conditional-fieldset hidden">
             <legend>שאלות למשפחה חד הורית</legend>
@@ -740,7 +804,7 @@
                 </select>
               </div>
               <div class="form-group">
-                <label for="ex_support_capability">האם לגרוש/ה יש יכולת מוכחת לפרנס?</label>
+                <label for="ex_support_capability">האם יש לגרוש/גרושה יכולת לפרנס את הילדים בעצמו?</label>
                 <select id="ex_support_capability" name="single_parent[ex_support_capability]">
                   <option value="" disabled selected>בחר אפשרות</option>
                   <option value="yes">כן, בעל/ת יכולת כלכלית טובה</option>
@@ -749,7 +813,7 @@
                 </select>
               </div>
               <div class="form-group">
-                <label for="alimony_insured">האם דמי המזונות מבוטחים במקרה של פטירת המשלם?</label>
+                <label for="alimony_insured">האם המזונות מבוטחים?</label>
                 <select id="alimony_insured" name="single_parent[alimony_insured]">
                   <option value="" disabled selected>בחר אפשרות</option>
                   <option value="yes">כן, קיים ביטוח חיים לטובת המזונות</option>
@@ -758,7 +822,7 @@
                 </select>
               </div>
               <div class="form-group span-3">
-                <label for="alimony_end_plan">תוכנית כלכלית לסיום קבלת המזונות (כאשר הילדים יגדלו)</label>
+                <label for="alimony_end_plan">שונות: תכנית לתקופת סיום המזונות?</label>
                 <textarea id="alimony_end_plan" name="single_parent[alimony_end_plan]" rows="2" placeholder="כיצד תתמודד המשפחה עם הפחתת/הפסקת המזונות בעתיד? האם נבנית קרן ייעודית?"></textarea>
               </div>
             </div>
@@ -769,7 +833,7 @@
             <legend>הסדרים למשפחת פרק ב'</legend>
             <div class="form-grid">
               <div class="form-group">
-                <label for="has_prenup">האם קיים הסכם ממון בתוקף?</label>
+                <label for="has_prenup">האם יש הסכם ממון?</label>
                 <select id="has_prenup" name="second_marriage[has_prenup]">
                   <option value="" disabled selected>בחר אפשרות</option>
                   <option value="yes">כן, נחתם ואושר כדין</option>
@@ -778,11 +842,11 @@
                 </select>
               </div>
               <div class="form-group span-2">
-                <label for="will_beneficiaries">מי הם המוטבים המוגדרים בביטוחים ובפנסיות?</label>
-                <input type="text" id="will_beneficiaries" name="second_marriage[beneficiaries]" placeholder="האם בן/בת הזוג הנוכחיים או הילדים מנישואין קודמים?">
+                <label for="will_beneficiaries">מי המוטבים בצוואה / בקרנות הפנסיה / בקרנות השתלמות?</label>
+                <textarea id="will_beneficiaries" name="second_marriage[beneficiaries]" placeholder="האם בן/בת הזוג הנוכחיים או הילדים מנישואין קודמים?" rows="1"></textarea>
               </div>
               <div class="form-group span-3">
-                <label for="property_agreements">הסכמות לגבי חלוקת רכוש קודם וילדים מנישואין קודמים (בירושה, תמיכה שוטפת)</label>
+                <label for="property_agreements">שונות: הסכמות לגבי רכוש קודם, הסכמות לגבי חסכונות לילדים מנישואים קודמים, עזרה להורים...</label>
                 <textarea id="property_agreements" name="second_marriage[property_agreements]" rows="2" placeholder="פרטים על הסדרים מוסכמים בנוגע לנכסים מלפני הנישואין הנוכחיים, רצונות הורשה ומחויבות לילדי העבר..."></textarea>
               </div>
             </div>
@@ -793,7 +857,7 @@
             <legend>התנהלות פיננסית לעצמאיים בעסק</legend>
             <div class="form-grid">
               <div class="form-group">
-                <label for="business_stability">רמת יציבות ההכנסות מהעסק</label>
+                <label for="business_stability">יציבות ההכנסה</label>
                 <select id="business_stability" name="self_employed[stability]">
                   <option value="" disabled selected>בחר רמת יציבות</option>
                   <option value="high">יציבה מאוד (תזרים קבוע וצפוי)</option>
@@ -802,12 +866,12 @@
                 </select>
               </div>
               <div class="form-group span-2">
-                <label for="business_risks">מהם הסיכונים העיקריים בעסק וכיצד הם מנוהלים?</label>
-                <input type="text" id="business_risks" name="self_employed[risks]" placeholder="למשל: תלות בלקוח גדול, מלאי, אשראי לקוחות וכו'">
+                <label for="business_risks">סיכונים</label>
+                <textarea id="business_risks" name="self_employed[risks]" placeholder="מהם הסיכונים העיקריים בעסק וכיצד הם מנוהלים?" rows="1"></textarea>
               </div>
               <div class="form-group span-3">
-                <label for="business_family_effect">איכות הניהול הפיננסי בעסק והשפעתו על התא המשפחתי</label>
-                <textarea id="business_family_effect" name="self_employed[family_effect]" rows="2" placeholder="האם יש הפרדה מוחלטת בין חשבון העסק לחשבון הבית? האם העסק ממומן על ידי חסכונות משפחתיים או ערבויות אישיות?"></textarea>
+                <label for="business_family_effect">איכות הניהול הפיננסי בעסק והשפעתו על ניהול כלכלת המשפחה:</label>
+                <textarea id="business_family_effect" name="self_employed[family_effect]" rows="2" placeholder="האם יש הפרדה מוחלטת בין חשבון העסק לחשבון הבית? השפעה על כלכלת המשפחה..."></textarea>
               </div>
             </div>
           </fieldset>
@@ -830,9 +894,13 @@
                   <option value="yes">כן, מוגדר ושמור בצד</option>
                 </select>
               </div>
-              <div class="form-group" id="emergency_fund_amount_container">
+              <div class="form-group hidden" id="emergency_fund_amount_container">
                 <label for="emergency_fund_amount">מהו סכום קרן החירום הזמין כיום? (ש"ח)</label>
                 <input type="number" id="emergency_fund_amount" name="goals[emergency_fund_amount]" min="0" placeholder="0">
+              </div>
+              <div class="form-group hidden" id="emergency_fund_location_container">
+                <label for="emergency_fund_location">איפה מוחזק ההון ליציבות / קרן חירום?</label>
+                <input type="text" id="emergency_fund_location" name="goals[emergency_fund_location]" placeholder="למשל: פיקדון נזיל, קרן כספית, עו&quot;ש">
               </div>
             </div>
           </fieldset>
@@ -867,7 +935,7 @@
           <!-- Recurring Goals Table -->
           <div class="table-section">
             <div class="table-header">
-              <h3>יעדים פיננסיים שחוזרים על עצמם (שדרוג רכב, חופשה שנתית משפחתית, שיפוץ תקופתי...)</h3>
+              <h3>יעדים שחוזרים על עצמם (שדרוג רכב, חופשה שנתית משפחתית, שיפוץ תקופתי...)</h3>
               <button type="button" class="btn-secondary add-row-btn" data-table="recurringGoalsTable">
                 <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 הוסף יעד מחזורי
@@ -921,7 +989,7 @@
           <!-- Children Goals Table -->
           <div class="table-section">
             <div class="table-header">
-              <h3>יעדים כלכליים עבור הילדים (מימון לימודים, עזרה ברכישת דירה, חתונה, בר/בת מצווה...)</h3>
+              <h3>יעדים לילדים (מימון לימודים, עזרה ברכישת דירה, חתונה, בר/בת מצווה...)</h3>
               <button type="button" class="btn-secondary add-row-btn" data-table="childrenGoalsTable">
                 <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                 הוסף יעד לילדים
@@ -950,7 +1018,7 @@
             <legend>ציפיות מהתהליך</legend>
             <div class="form-grid">
               <div class="form-group span-3">
-                <label for="consultation_expectations">מה הייתם רוצים להשיג עוד מתהליך הייעוץ הפיננסי האישי? <span class="required">*</span></label>
+                <label for="consultation_expectations">מה הייתם רוצים להשיג עוד מתהליך הייעוץ הפיננסי האישי שלכם? <span class="required">*</span></label>
                 <textarea id="consultation_expectations" name="goals[expectations]" rows="4" placeholder="שתפו בלבטים הגדולים שלכם, מה החלומות שלכם ומה יוגדר כהצלחה עבורכם בתום התהליך..." required></textarea>
               </div>
             </div>

@@ -16,13 +16,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const condSecondMarriage = document.getElementById('conditional_second_marriage');
   const condSelfEmployed = document.getElementById('conditional_self_employed');
   
+  // Conditional Toggle Checkboxes
+  const toggleSingleParentCheckbox = document.getElementById('toggle_single_parent');
+  const toggleSecondMarriageCheckbox = document.getElementById('toggle_second_marriage');
+  const toggleSelfEmployedCheckbox = document.getElementById('toggle_self_employed');
+  
   // Form Status & Control Elements
   const fillDateInput = document.getElementById('fill_date');
   const maritalStatusSelect = document.getElementById('marital_status');
   const marriageDurationContainer = document.getElementById('marriage_duration_container');
   const previousMarriageSelect = document.getElementById('previous_marriage');
-  const p1SelfEmployedCheckbox = document.getElementById('p1_is_self_employed');
-  const p2SelfEmployedCheckbox = document.getElementById('p2_is_self_employed');
+  const p1EmploymentTypeSelect = document.getElementById('p1_employment_type');
+  const p2EmploymentTypeSelect = document.getElementById('p2_employment_type');
   
   const hasEmergencyFundSelect = document.getElementById('has_emergency_fund');
   const emergencyFundAmountContainer = document.getElementById('emergency_fund_amount_container');
@@ -49,7 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- DYNAMIC TABLE CELL TEMPLATES ---
   const TABLE_TEMPLATES = {
     childrenTable: () => `
-      <td><input type="text" class="cell-name" placeholder="שם הילד/ה" required></td>
+      <td><textarea class="cell-name" rows="1" placeholder="שם הילד/ה" required></textarea></td>
       <td>
         <select class="cell-gender">
           <option value="ז">זכר</option>
@@ -58,6 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
       <td><input type="number" class="cell-age" min="0" max="50" placeholder="גיל" required></td>
       <td><textarea class="cell-notes" rows="1" placeholder="פירוט צרכים פיננסיים, חוגים וכו'"></textarea></td>
+      <td><textarea class="cell-general_notes" rows="1" placeholder="הערות כלליות (צרכים מיוחדים וכו')"></textarea></td>
       <td class="col-actions">
         <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
@@ -66,12 +72,12 @@ document.addEventListener('DOMContentLoaded', () => {
     `,
     circleTable: () => `
       <td><select class="cell-close-to"><option value="בן זוג 1">בן זוג 1</option><option value="בן זוג 2">בן זוג 2</option><option value="משותף">משותף</option></select></td>
-      <td><input type="text" class="cell-relation" placeholder="למשל: אב, סבתא" required></td>
+      <td><textarea class="cell-relation" rows="1" placeholder="למשל: אב, סבתא" required></textarea></td>
       <td><select class="cell-financial-status">${generateNumberOptions(1, 10, 5)}</select></td>
       <td><select class="cell-can-help">${generateNumberOptions(1, 10, 5)}</select></td>
       <td><select class="cell-needs-help">${generateNumberOptions(1, 10, 1)}</select></td>
       <td><input type="number" class="cell-wealth-transfer" min="0" placeholder="0"></td>
-      <td><input type="text" class="cell-notes" placeholder="הערות"></td>
+      <td><textarea class="cell-notes" rows="1" placeholder="הערות"></textarea></td>
       <td class="col-actions">
         <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -79,9 +85,9 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     additionalIncomeTable: () => `
-      <td><input type="text" class="cell-source" placeholder="למשל: קצבת ילדים, שכירות" required></td>
+      <td><textarea class="cell-source" rows="1" placeholder="למשל: קצבת ילדים, שכירות" required></textarea></td>
       <td><input type="number" class="cell-amount" min="0" placeholder="0" required></td>
-      <td><input type="text" class="cell-notes" placeholder="זמני/קבוע, מועד סיום"></td>
+      <td><textarea class="cell-notes" rows="1" placeholder="זמני/קבוע, מועד סיום"></textarea></td>
       <td class="col-actions">
         <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -89,12 +95,12 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     realEstateTable: () => `
-      <td><input type="text" class="cell-description" placeholder="נכס מגורים/השקעה + עיר" required></td>
+      <td><textarea class="cell-description" rows="1" placeholder="נכס מגורים/השקעה + עיר" required></textarea></td>
       <td><input type="number" class="cell-purchase-val" min="0" placeholder="0"></td>
       <td><input type="number" class="cell-current-val" min="0" placeholder="0" required></td>
       <td><input type="number" class="cell-mortgage-orig" min="0" placeholder="0"></td>
       <td><input type="number" class="cell-mortgage-rem" min="0" placeholder="0"></td>
-      <td><input type="text" class="cell-notes" placeholder="הערות"></td>
+      <td><textarea class="cell-notes" rows="1" placeholder="הערות"></textarea></td>
       <td class="col-actions">
         <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -102,14 +108,14 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     mortgageTable: () => `
-      <td><input type="text" class="cell-bank" placeholder="בנק מלווה" required></td>
-      <td><input type="text" class="cell-track" placeholder="פריים, קל&quot;צ, משתנה" required></td>
+      <td><textarea class="cell-bank" rows="1" placeholder="בנק מלווה" required></textarea></td>
+      <td><textarea class="cell-track" rows="1" placeholder="פריים, קל&quot;צ, משתנה" required></textarea></td>
       <td><input type="number" class="cell-orig" min="0" placeholder="0"></td>
       <td><input type="number" class="cell-remaining" min="0" placeholder="0" required></td>
       <td><input type="number" class="cell-rate" step="0.01" min="0" placeholder="0.0" required></td>
       <td><input type="month" class="cell-end-date" required></td>
       <td><input type="number" class="cell-monthly" min="0" placeholder="0" required></td>
-      <td><input type="text" class="cell-notes" placeholder="הערות"></td>
+      <td><textarea class="cell-notes" rows="1" placeholder="הערות"></textarea></td>
       <td class="col-actions">
         <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -117,10 +123,10 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     vehiclesTable: () => `
-      <td><input type="text" class="cell-model" placeholder="יצרן ודגם" required></td>
+      <td><textarea class="cell-model" rows="1" placeholder="יצרן ודגם" required></textarea></td>
       <td><input type="number" class="cell-year" min="1980" max="2030" placeholder="שנת ייצור" required></td>
       <td><input type="number" class="cell-value" min="0" placeholder="0" required></td>
-      <td><input type="text" class="cell-notes" placeholder="בעלות, הלוואה וכו'"></td>
+      <td><textarea class="cell-notes" rows="1" placeholder="בעלות, הלוואה וכו'"></textarea></td>
       <td class="col-actions">
         <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -138,9 +144,9 @@ document.addEventListener('DOMContentLoaded', () => {
           <option value="אחר">אחר</option>
         </select>
       </td>
-      <td><input type="text" class="cell-company" placeholder="בנק / בית השקעות" required></td>
+      <td><textarea class="cell-company" rows="1" placeholder="בנק / בית השקעות" required></textarea></td>
       <td><input type="number" class="cell-amount" min="0" placeholder="0" required></td>
-      <td><input type="text" class="cell-notes" placeholder="נזיל/זמני, ייעוד"></td>
+      <td><textarea class="cell-notes" rows="1" placeholder="נזיל/זמני, ייעוד"></textarea></td>
       <td class="col-actions">
         <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -148,8 +154,8 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     liabilitiesTable: () => `
-      <td><input type="text" class="cell-lender" placeholder="הבנק / הגורם המלווה" required></td>
-      <td><input type="text" class="cell-purpose" placeholder="מטרת ההלוואה" required></td>
+      <td><textarea class="cell-lender" rows="1" placeholder="הבנק / הגורם המלווה" required></textarea></td>
+      <td><textarea class="cell-purpose" rows="1" placeholder="מטרת ההלוואה" required></textarea></td>
       <td><input type="number" class="cell-orig" min="0" placeholder="0"></td>
       <td><input type="number" class="cell-current" min="0" placeholder="0" required></td>
       <td><input type="number" class="cell-monthly" min="0" placeholder="0" required></td>
@@ -163,9 +169,15 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     allowancesTable: () => `
-      <td><input type="text" class="cell-source" placeholder="קצבת ילדים / נכות / אחר" required></td>
+      <td>
+        <select class="cell-source">
+          <option value="ביטוח לאומי">ביטוח לאומי</option>
+          <option value="פנסיה ממקור אחר">פנסיה ממקור אחר</option>
+        </select>
+      </td>
+      <td><textarea class="cell-recipient" rows="1" placeholder="למשל: בן זוג 1" required></textarea></td>
       <td><input type="number" class="cell-amount" min="0" placeholder="0" required></td>
-      <td><input type="text" class="cell-notes" placeholder="קבוע / זמני"></td>
+      <td><textarea class="cell-notes" rows="1" placeholder="קבוע / זמני"></textarea></td>
       <td class="col-actions">
         <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -183,10 +195,10 @@ document.addEventListener('DOMContentLoaded', () => {
           <option value="מחלות קשות">מחלות קשות</option>
         </select>
       </td>
-      <td><input type="text" class="cell-insured" placeholder="למשל: כולם, בת זוג 2" required></td>
-      <td><input type="text" class="cell-company" placeholder="חברת ביטוח" required></td>
-      <td><input type="text" class="cell-premium" placeholder="עלות / כיסוי" required></td>
-      <td><input type="text" class="cell-agent" placeholder="שם סוכן"></td>
+      <td><textarea class="cell-insured" rows="1" placeholder="למשל: כולם, בת זוג 2" required></textarea></td>
+      <td><textarea class="cell-company" rows="1" placeholder="חברת ביטוח" required></textarea></td>
+      <td><textarea class="cell-premium" rows="1" placeholder="עלות / כיסוי" required></textarea></td>
+      <td><textarea class="cell-agent" rows="1" placeholder="שם סוכן"></textarea></td>
       <td>
         <select class="cell-cov-type">
           <option value="private">פרטי</option>
@@ -201,10 +213,10 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     capitalReceiptsTable: () => `
-      <td><input type="text" class="cell-source" placeholder="למשל: השתלמות, ירושה" required></td>
+      <td><textarea class="cell-source" rows="1" placeholder="למשל: השתלמות, ירושה" required></textarea></td>
       <td><input type="number" class="cell-amount" min="0" placeholder="0" required></td>
-      <td><input type="text" class="cell-when" placeholder="למשל: 2028, עוד שנתיים" required></td>
-      <td><input type="text" class="cell-notes" placeholder="שימוש מתוכנן"></td>
+      <td><textarea class="cell-when" rows="1" placeholder="למשל: 2028, עוד שנתיים" required></textarea></td>
+      <td><textarea class="cell-notes" rows="1" placeholder="שימוש מתוכנן"></textarea></td>
       <td class="col-actions">
         <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -212,10 +224,10 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     recurringGoalsTable: () => `
-      <td><input type="text" class="cell-description" placeholder="שדרוג רכב, חופשה שנתית" required></td>
+      <td><textarea class="cell-description" rows="1" placeholder="שדרוג רכב, חופשה שנתית" required></textarea></td>
       <td><input type="number" class="cell-freq" min="1" placeholder="למשל: 3" required></td>
       <td><input type="number" class="cell-cost" min="0" placeholder="0" required></td>
-      <td><input type="text" class="cell-notes" placeholder="הערות"></td>
+      <td><textarea class="cell-notes" rows="1" placeholder="הערות"></textarea></td>
       <td class="col-actions">
         <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -223,10 +235,10 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     oneTimeGoalsTable: () => `
-      <td><input type="text" class="cell-description" placeholder="קניית דירה, עסק, לימודים" required></td>
+      <td><textarea class="cell-description" rows="1" placeholder="קניית דירה, עסק, לימודים" required></textarea></td>
       <td><input type="number" class="cell-years" min="1" placeholder="למשל: 5" required></td>
       <td><input type="number" class="cell-cost" min="0" placeholder="0" required></td>
-      <td><input type="text" class="cell-notes" placeholder="הערות"></td>
+      <td><textarea class="cell-notes" rows="1" placeholder="הערות"></textarea></td>
       <td class="col-actions">
         <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -234,10 +246,84 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     childrenGoalsTable: () => `
-      <td><input type="text" class="cell-description" placeholder="מימון חתונה, עזרה לדירה" required></td>
+      <td><textarea class="cell-description" rows="1" placeholder="מימון חתונה, עזרה לדירה" required></textarea></td>
       <td><input type="number" class="cell-cost" min="0" placeholder="0" required></td>
       <td><input type="number" class="cell-age" min="1" placeholder="למשל: 21" required></td>
-      <td><input type="text" class="cell-notes" placeholder="הערות"></td>
+      <td><textarea class="cell-notes" rows="1" placeholder="הערות"></textarea></td>
+      <td class="col-actions">
+        <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
+      </td>
+    `,
+    bankAccountsTable: () => `
+      <td><textarea class="cell-name" rows="1" placeholder="למשל: לאומי סניף 800" required></textarea></td>
+      <td><textarea class="cell-owner" rows="1" placeholder="למשל: משותף / בן זוג 1" required></textarea></td>
+      <td><input type="number" class="cell-limit" min="0" placeholder="0"></td>
+      <td><textarea class="cell-usage" rows="1" placeholder="למשל: עו&quot;ש משפחתי ראשי"></textarea></td>
+      <td>
+        <select class="cell-restricted">
+          <option value="no">לא</option>
+          <option value="yes">כן</option>
+        </select>
+      </td>
+      <td class="col-actions">
+        <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
+      </td>
+    `,
+    creditCardsTable: () => `
+      <td><textarea class="cell-owner" rows="1" placeholder="משותף / בן זוג 1 / 2" required></textarea></td>
+      <td><textarea class="cell-name" rows="1" placeholder="למשל: ויזה כאל" required></textarea></td>
+      <td><input type="text" class="cell-digits" placeholder="1234" maxlength="4" pattern="\\d{4}"></td>
+      <td><input type="number" class="cell-limit" min="0" placeholder="0"></td>
+      <td><textarea class="cell-usage" rows="1" placeholder="למשל: קניות סופר/דלק"></textarea></td>
+      <td><textarea class="cell-notes" rows="1" placeholder="פירוט עסקאות, תשלומים וכו'"></textarea></td>
+      <td class="col-actions">
+        <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
+      </td>
+    `,
+    pensionsTable: () => `
+      <td>
+        <select class="cell-owner">
+          <option value="בן זוג 1">בן זוג 1</option>
+          <option value="בן זוג 2">בן זוג 2</option>
+        </select>
+      </td>
+      <td><textarea class="cell-company" rows="1" placeholder="למשל: אלטשולר שחם / מגדל" required></textarea></td>
+      <td>
+        <select class="cell-is_executive_insurance">
+          <option value="no" selected>לא</option>
+          <option value="yes">כן</option>
+        </select>
+      </td>
+      <td><input type="number" class="cell-balance" min="0" placeholder="0" required></td>
+      <td><input type="number" class="cell-monthly_deposit" min="0" placeholder="0"></td>
+      <td>
+        <select class="cell-has_life_insurance">
+          <option value="yes">כן (שארים)</option>
+          <option value="no">לא</option>
+          <option value="unknown">לא ידוע</option>
+        </select>
+      </td>
+      <td><input type="number" class="cell-annuity_coefficient" step="0.1" min="0" placeholder="מקדם"></td>
+      <td><textarea class="cell-notes" rows="1" placeholder="הערות"></textarea></td>
+      <td class="col-actions">
+        <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
+      </td>
+    `,
+    expensesTable: () => `
+      <td><textarea class="cell-category" rows="1" placeholder="סעיף הוצאה" required></textarea></td>
+      <td><input type="number" class="cell-month1" min="0" placeholder="0"></td>
+      <td><input type="number" class="cell-month2" min="0" placeholder="0"></td>
+      <td><input type="number" class="cell-month3" min="0" placeholder="0"></td>
+      <td><input type="number" class="cell-average input-readonly" readonly placeholder="0"></td>
+      <td><textarea class="cell-notes" rows="1" placeholder="הערות"></textarea></td>
       <td class="col-actions">
         <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -253,6 +339,63 @@ document.addEventListener('DOMContentLoaded', () => {
       options += `<option value="${i}" ${i === selectedVal ? 'selected' : ''}>${i}</option>`;
     }
     return options;
+  }
+
+  const DEFAULT_EXPENSES_LIST = [
+    'משכתנתא', 'הלוואות', 'ביטוח בריאות משלים', 'ביטוח בריאות פרטי', 'ביטוח חיים', 'ביטוח דירה',
+    'הקצאה להוצאות בלת"מ', 'חיסכון', 'מזון ומכולת', 'ביגוד והנעלה', 'חשמל', 'גז',
+    'ארנונה ומים', 'מטפלת/שמרטף/מעון/גן', 'ביה"ס וחומרי לימוד', 'חוגים', 'דמי כיס',
+    'טלפון קווי', 'טלפון סלולרי', 'אינטרנט', 'שכ"ד', 'וועד בית', 'עוזרת',
+    'אחזקת בית ותיקונים', 'תחבורה ציבורית', 'דלק', 'אחזקת רכב ותיקונים', 'ביטוח (חובה ומקיף)',
+    'טסט', 'עמלות וריבית', 'מספרה', 'קוסמטיקה', 'כבלים', 'מנויים', 'עיתונים',
+    'נסיעות לחו"ל וחופשות', 'קאנטרי קלאב', 'מסעדות סרטים והצגות', 'מתנות (משפחה, אירועים)',
+    'מזונות', 'תמיכה בבני המשפחה', 'הוצאות ריפוי', 'סיגריות', 'מזומן ללא מעקב'
+  ];
+
+  function initializeExpensesTable(expensesDraft = null) {
+    const tbody = document.querySelector('#expensesTable tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    const rowMap = {};
+    DEFAULT_EXPENSES_LIST.forEach(category => {
+      const row = addTableRow('expensesTable', { category: category });
+      rowMap[category] = row;
+    });
+
+    let expensesArray = [];
+    if (expensesDraft) {
+      if (Array.isArray(expensesDraft)) {
+        expensesArray = expensesDraft;
+      } else if (typeof expensesDraft === 'object') {
+        expensesArray = [{
+          category: 'אחר',
+          month1: expensesDraft.total_amount || '',
+          notes: expensesDraft.details || 'שוחזר מטיוטה ישנה'
+        }];
+      }
+    }
+
+    expensesArray.forEach(item => {
+      if (!item || !item.category) return;
+      const category = item.category;
+      const existingRow = rowMap[category];
+      if (existingRow) {
+        Object.keys(item).forEach(key => {
+          if (key === 'category') return;
+          const input = existingRow.querySelector(`.cell-${key}`);
+          if (input) {
+            if (input.type === 'checkbox') {
+              input.checked = item[key];
+            } else {
+              input.value = item[key];
+            }
+          }
+        });
+      } else {
+        addTableRow('expensesTable', item);
+      }
+    });
   }
 
   // --- INITIALIZE PAGE ---
@@ -289,6 +432,46 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Global Event Delegation for Premium Tooltips (avoids table boundary clipping)
+  document.addEventListener('mouseover', (e) => {
+    const trigger = e.target.closest('.tooltip-trigger');
+    if (!trigger) return;
+    const textNode = trigger.querySelector('.tooltip-box') || trigger.querySelector('.tooltip-text');
+    if (!textNode) return;
+
+    let globalTooltip = document.getElementById('global-tooltip');
+    if (!globalTooltip) {
+      globalTooltip = document.createElement('div');
+      globalTooltip.id = 'global-tooltip';
+      globalTooltip.className = 'global-tooltip-box';
+      document.body.appendChild(globalTooltip);
+    }
+
+    globalTooltip.textContent = textNode.textContent;
+    
+    // Position it temporarily to measure height
+    globalTooltip.classList.add('visible'); 
+    
+    const rect = trigger.getBoundingClientRect();
+    const tooltipRect = globalTooltip.getBoundingClientRect();
+    
+    // Position tooltip above the trigger, centered horizontally
+    const top = window.scrollY + rect.top - tooltipRect.height - 8;
+    const left = window.scrollX + rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+
+    globalTooltip.style.top = `${top}px`;
+    globalTooltip.style.left = `${left}px`;
+  });
+
+  document.addEventListener('mouseout', (e) => {
+    const trigger = e.target.closest('.tooltip-trigger');
+    if (!trigger) return;
+    const globalTooltip = document.getElementById('global-tooltip');
+    if (globalTooltip) {
+      globalTooltip.classList.remove('visible');
+    }
+  });
+
   // Helper to validate all steps silently and update the dot indicators
   function validateAllStepsDots(forceAll = false) {
     for (let s = 1; s <= TOTAL_STEPS; s++) {
@@ -309,10 +492,45 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Handle input event to trigger auto-saving draft
+  function updateComputedExpensesTotal() {
+    const table = document.getElementById('expensesTable');
+    if (!table) return;
+    const rows = table.querySelectorAll('tbody tr');
+    let total = 0;
+    rows.forEach(row => {
+      const m1Val = row.querySelector('.cell-month1')?.value;
+      const m2Val = row.querySelector('.cell-month2')?.value;
+      const m3Val = row.querySelector('.cell-month3')?.value;
+
+      const m1 = parseFloat(m1Val);
+      const m2 = parseFloat(m2Val);
+      const m3 = parseFloat(m3Val);
+
+      let sum = 0;
+      let count = 0;
+
+      if (m1Val !== undefined && m1Val !== '' && !isNaN(m1)) { sum += m1; count++; }
+      if (m2Val !== undefined && m2Val !== '' && !isNaN(m2)) { sum += m2; count++; }
+      if (m3Val !== undefined && m3Val !== '' && !isNaN(m3)) { sum += m3; count++; }
+
+      const avg = count > 0 ? sum / count : 0;
+
+      const avgInput = row.querySelector('.cell-average');
+      if (avgInput) {
+        avgInput.value = count > 0 ? Math.round(avg) : '';
+      }
+      total += avg;
+    });
+    const totalSpan = document.getElementById('computedTotalExpenses');
+    if (totalSpan) {
+      totalSpan.textContent = Math.round(total).toLocaleString('he-IL');
+    }
+  }
+
   form.addEventListener('input', () => {
     saveDraft();
     validateAllStepsDots();
+    updateComputedExpensesTotal();
   });
   form.addEventListener('change', () => {
     saveDraft();
@@ -320,7 +538,6 @@ document.addEventListener('DOMContentLoaded', () => {
     validateAllStepsDots();
   });
 
-  // Clear Draft button
   clearDraftBtn.addEventListener('click', () => {
     if (confirm('האם אתה בטוח שברצונך למחוק את כל הנתונים ולהתחיל מחדש?')) {
       localStorage.removeItem('financial_questionnaire_draft');
@@ -330,31 +547,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Helper to clear all dynamic tables
   function clearAllDynamicTables() {
-    const tableIds = [
-      'childrenTable', 'circleTable', 'additionalIncomeTable', 'realEstateTable',
-      'mortgageTable', 'vehiclesTable', 'financialAssetsTable', 'liabilitiesTable',
-      'allowancesTable', 'insurancesTable', 'capitalReceiptsTable',
-      'recurringGoalsTable', 'oneTimeGoalsTable', 'childrenGoalsTable'
-    ];
-    tableIds.forEach(id => {
-      const tbody = document.querySelector(`#${id} tbody`);
-      if (tbody) tbody.innerHTML = '';
+    const tables = ['childrenTable', 'circleTable', 'additionalIncomeTable', 'expensesTable', 'realEstateTable', 'mortgageTable', 'vehiclesTable', 'financialAssetsTable', 'bankAccountsTable', 'creditCardsTable', 'pensionsTable', 'liabilitiesTable', 'allowancesTable', 'insurancesTable', 'capitalReceiptsTable', 'recurringGoalsTable', 'oneTimeGoalsTable', 'childrenGoalsTable'];
+    tables.forEach(tableId => {
+      const tbody = document.querySelector(`#${tableId} tbody`);
+      if (tbody) {
+        tbody.innerHTML = '';
+      }
     });
   }
 
-  // Upload JSON button click handler
   uploadJsonBtn.addEventListener('click', () => {
     jsonFileInput.click();
   });
 
-  // Download Draft button handler
   downloadDraftBtn.addEventListener('click', () => {
     const data = getFormDataJSON();
     const jsonString = JSON.stringify(data, null, 2);
     
-    // Get partner names for draft filename
     const p1Name = document.getElementById('p1_first_name') ? document.getElementById('p1_first_name').value.trim() : '';
     const p2Name = document.getElementById('p2_first_name') ? document.getElementById('p2_first_name').value.trim() : '';
     
@@ -385,7 +595,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Handle uploaded JSON file
   jsonFileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -396,13 +605,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const data = JSON.parse(evt.target.result);
         if (!data) throw new Error('קובץ ריק');
 
-        // Clear all tables before populating to avoid duplicate rows
         clearAllDynamicTables();
 
-        // Populate basic inputs
         populateFields(data);
 
-        // Rebuild dynamic tables
         if (data.family && data.family.children) {
           data.family.children.forEach(child => addTableRow('childrenTable', child));
         }
@@ -411,6 +617,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (data.additional_income) {
           data.additional_income.forEach(income => addTableRow('additionalIncomeTable', income));
+        }
+        if (data.expenses) {
+          initializeExpensesTable(data.expenses);
         }
         if (data.assets && data.assets.real_estate) {
           data.assets.real_estate.forEach(prop => addTableRow('realEstateTable', prop));
@@ -430,6 +639,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.allowances) {
           data.allowances.forEach(allowance => addTableRow('allowancesTable', allowance));
         }
+        if (data.bank_accounts) {
+          data.bank_accounts.forEach(acc => addTableRow('bankAccountsTable', acc));
+        }
+        if (data.credit_cards) {
+          data.credit_cards.forEach(card => addTableRow('creditCardsTable', card));
+        }
+        if (data.pensions) {
+          data.pensions.forEach(pen => addTableRow('pensionsTable', pen));
+        }
         if (data.insurances) {
           data.insurances.forEach(insurance => addTableRow('insurancesTable', insurance));
         }
@@ -446,10 +664,9 @@ document.addEventListener('DOMContentLoaded', () => {
           data.goals.children_goals.forEach(goal => addTableRow('childrenGoalsTable', goal));
         }
 
-        // Check conditional visibility
         toggleConditionalFields();
+        updateComputedExpensesTotal();
 
-        // Rebuild visitedSteps based on loaded content
         visitedSteps.clear();
         for (let s = 1; s <= TOTAL_STEPS; s++) {
           if (validateStep(s, true)) {
@@ -457,14 +674,15 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         }
 
-        // Return user to Step 1
         goToStep(1);
 
-        // Update dot styles
         validateAllStepsDots();
 
-        // Save loaded state immediately to local storage
         saveDraft();
+
+        if (window.resizeAllTextareas) {
+          setTimeout(window.resizeAllTextareas, 50);
+        }
 
         showNotification('קובץ הנתונים נטען בהצלחה! כל השדות מולאו.', 'success');
       } catch (err) {
@@ -472,36 +690,27 @@ document.addEventListener('DOMContentLoaded', () => {
         showNotification('שגיאה בטעינת הקובץ. ודא כי זהו קובץ JSON תקין שהורד מהאתר.', 'error');
       }
       
-      // Reset input to allow uploading same file again
       jsonFileInput.value = '';
     };
     reader.readAsText(file);
   });
 
-  // Navigation: Back Button
   backBtn.addEventListener('click', () => {
     if (currentStep > 1) {
       goToStep(currentStep - 1);
     }
   });
 
-  // Navigation: Next/Submit Button
   nextBtn.addEventListener('click', () => {
-    // Mark current step as visited since we are leaving it
     visitedSteps.add(currentStep);
 
-    // Run visual validation for current step
     validateStep(currentStep);
     
-    // Update dots indicator states
     validateAllStepsDots();
 
     if (currentStep < TOTAL_STEPS) {
-      // Go to next step anyway
       goToStep(currentStep + 1);
     } else {
-      // Trying to submit from step 5!
-      // Must validate ALL steps
       let allValid = true;
       let firstInvalidStep = null;
 
@@ -515,7 +724,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      // Re-validate dots to apply changes, forcing validation on all
       validateAllStepsDots(true);
 
       if (allValid) {
@@ -527,53 +735,47 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Click step dots to navigate freely
   stepDots.forEach(dot => {
     dot.addEventListener('click', () => {
       const targetStep = parseInt(dot.getAttribute('data-step'));
       if (targetStep === currentStep) return;
 
-      // Mark current step as visited since we are leaving it
       visitedSteps.add(currentStep);
 
-      // Show errors visually on step we are leaving, if any
       validateStep(currentStep);
       
-      // Update dots indicator states
       validateAllStepsDots();
 
-      // Go to target step directly
       goToStep(targetStep);
     });
   });
 
-  // Close success modal
   closeModalBtn.addEventListener('click', () => {
     successModal.classList.add('hidden');
   });
 
-  // --- WIZARD FUNCTIONS ---
-
   function goToStep(stepNum) {
-    // Hide current step
     document.getElementById(`step${currentStep}`).classList.remove('active');
     
-    // Update step tracker
     currentStep = stepNum;
     
-    // Show new step
     const nextStepEl = document.getElementById(`step${currentStep}`);
     nextStepEl.classList.add('active');
     
-    // Scroll to top of form smoothly
+    // Resize textareas inside the newly active step once displayed to calculate scrollHeight correctly
+    nextStepEl.querySelectorAll('textarea').forEach(textarea => {
+      textarea.style.resize = 'none';
+      textarea.style.overflowY = 'hidden';
+      textarea.style.height = 'auto';
+      textarea.style.height = textarea.scrollHeight + 'px';
+    });
+    
     nextStepEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-    // Update progress indicator
     const percent = ((currentStep - 1) / (TOTAL_STEPS - 1)) * 100;
     progressBar.style.width = `${percent}%`;
     progressContainer.setAttribute('data-current-step', currentStep);
 
-    // Update Dots classes
     stepDots.forEach(dot => {
       const dotVal = parseInt(dot.getAttribute('data-step'));
       dot.classList.remove('active', 'completed');
@@ -584,7 +786,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // Update Buttons text and state
     backBtn.disabled = currentStep === 1;
     if (currentStep === TOTAL_STEPS) {
       nextBtn.innerHTML = `שלח שאלון <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
@@ -595,7 +796,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Add a dynamic table row
   function addTableRow(tableName, initialData = null) {
     const tableBody = document.querySelector(`#${tableName} tbody`);
     if (!tableBody || !TABLE_TEMPLATES[tableName]) return;
@@ -604,7 +804,6 @@ document.addEventListener('DOMContentLoaded', () => {
     row.innerHTML = TABLE_TEMPLATES[tableName]();
     tableBody.appendChild(row);
 
-    // If initialData is supplied, populate cells
     if (initialData) {
       Object.keys(initialData).forEach(key => {
         const input = row.querySelector(`.cell-${key}`);
@@ -618,48 +817,111 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // Bind real-time draft saving to the new cells
     row.querySelectorAll('input, select, textarea').forEach(input => {
       input.addEventListener('input', saveDraft);
       input.addEventListener('change', saveDraft);
     });
 
+    row.querySelectorAll('textarea').forEach(textarea => {
+      textarea.style.resize = 'none';
+      textarea.style.overflowY = 'hidden';
+      setTimeout(() => {
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+      }, 0);
+    });
+
     return row;
   }
 
-  // --- DYNAMIC CONDITIONAL SHOW/HIDE ---
-  
   function toggleConditionalFields() {
-    // 1. Single Parent Questions
-    const maritalStatus = maritalStatusSelect.value;
-    const isSingleParent = maritalStatus === 'single_parent' || maritalStatus === 'divorced' || maritalStatus === 'widowed';
+    const isSingleParent = toggleSingleParentCheckbox.checked;
     condSingleParent.classList.toggle('hidden', !isSingleParent);
 
-    // 2. Second Marriage Questions
-    const previousMarriage = previousMarriageSelect.value;
-    condSecondMarriage.classList.toggle('hidden', previousMarriage !== 'yes');
+    const isSecondMarriage = toggleSecondMarriageCheckbox.checked;
+    condSecondMarriage.classList.toggle('hidden', !isSecondMarriage);
 
-    // 3. Self Employed Questions
-    const isSelfEmployed = p1SelfEmployedCheckbox.checked || p2SelfEmployedCheckbox.checked;
+    const isSelfEmployed = toggleSelfEmployedCheckbox.checked;
     condSelfEmployed.classList.toggle('hidden', !isSelfEmployed);
 
-    // 4. Marriage Duration visibility (show only if married or cohabiting)
-    const isMarriedOrCohab = maritalStatus === 'married' || maritalStatus === 'cohabiting';
-    marriageDurationContainer.classList.toggle('hidden', !isMarriedOrCohab);
+    const p1EmployeeIncomeContainer = document.getElementById('p1_employee_income_container');
+    const p1BonusesContainer = document.getElementById('p1_bonuses_container');
+    const p1SelfEmployedIncomeContainer = document.getElementById('p1_self_employed_income_container');
+    if (p1EmploymentTypeSelect) {
+      const isP1SelfEmployed = p1EmploymentTypeSelect.value === 'self_employed';
+      if (p1SelfEmployedIncomeContainer) {
+        p1SelfEmployedIncomeContainer.classList.toggle('hidden', !isP1SelfEmployed);
+        if (!isP1SelfEmployed) {
+          const input = document.getElementById('p1_self_employed_income');
+          if (input) input.value = '';
+        }
+      }
+      if (p1EmployeeIncomeContainer) {
+        p1EmployeeIncomeContainer.classList.toggle('hidden', isP1SelfEmployed);
+        if (isP1SelfEmployed) {
+          const input = document.getElementById('p1_employee_income');
+          if (input) input.value = '';
+        }
+      }
+      if (p1BonusesContainer) {
+        p1BonusesContainer.classList.toggle('hidden', isP1SelfEmployed);
+        if (isP1SelfEmployed) {
+          const input = document.getElementById('p1_bonuses');
+          if (input) input.value = '';
+        }
+      }
+    }
 
-    // 5. Emergency Fund Amount visibility
+    const p2EmployeeIncomeContainer = document.getElementById('p2_employee_income_container');
+    const p2BonusesContainer = document.getElementById('p2_bonuses_container');
+    const p2SelfEmployedIncomeContainer = document.getElementById('p2_self_employed_income_container');
+    if (p2EmploymentTypeSelect) {
+      const isP2SelfEmployed = p2EmploymentTypeSelect.value === 'self_employed';
+      if (p2SelfEmployedIncomeContainer) {
+        p2SelfEmployedIncomeContainer.classList.toggle('hidden', !isP2SelfEmployed);
+        if (!isP2SelfEmployed) {
+          const input = document.getElementById('p2_self_employed_income');
+          if (input) input.value = '';
+        }
+      }
+      if (p2EmployeeIncomeContainer) {
+        p2EmployeeIncomeContainer.classList.toggle('hidden', isP2SelfEmployed);
+        if (isP2SelfEmployed) {
+          const input = document.getElementById('p2_employee_income');
+          if (input) input.value = '';
+        }
+      }
+      if (p2BonusesContainer) {
+        p2BonusesContainer.classList.toggle('hidden', isP2SelfEmployed);
+        if (isP2SelfEmployed) {
+          const input = document.getElementById('p2_bonuses');
+          if (input) input.value = '';
+        }
+      }
+    }
+
     const hasEmergencyFund = hasEmergencyFundSelect.value;
-    emergencyFundAmountContainer.classList.toggle('hidden', hasEmergencyFund !== 'yes');
-  }
+    const isFundYes = hasEmergencyFund === 'yes';
+    emergencyFundAmountContainer.classList.toggle('hidden', !isFundYes);
+    const emergencyFundLocationContainer = document.getElementById('emergency_fund_location_container');
+    if (emergencyFundLocationContainer) {
+      emergencyFundLocationContainer.classList.toggle('hidden', !isFundYes);
+      if (!isFundYes) {
+        const input = document.getElementById('emergency_fund_location');
+        if (input) input.value = '';
+      }
+    }
 
-  // --- VALIDATION LOGIC ---
+    if (window.resizeAllTextareas) {
+      setTimeout(window.resizeAllTextareas, 0);
+    }
+  }
 
   function validateStep(stepNum, silent = false) {
     const stepEl = document.getElementById(`step${stepNum}`);
     let isValid = true;
 
     if (!silent) {
-      // 1. Remove previous error states in this step
       stepEl.querySelectorAll('.form-group.has-error').forEach(group => {
         group.classList.remove('has-error');
         const errorMsg = group.querySelector('.error-message');
@@ -667,10 +929,8 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    // 2. Validate standard inputs inside active step
     const inputs = stepEl.querySelectorAll('input, select, textarea');
     inputs.forEach(input => {
-      // Skip validation for inputs in hidden/conditional fields
       const closestFieldset = input.closest('.conditional-fieldset');
       if (closestFieldset && closestFieldset.classList.contains('hidden')) {
         return;
@@ -679,12 +939,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const formGroup = input.closest('.form-group');
       let fieldError = '';
 
-      // Check required
       if (input.hasAttribute('required') && !input.value.trim()) {
         fieldError = 'שדה זה הוא חובה';
       }
       
-      // Email check
       else if (input.type === 'email' && input.value.trim()) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(input.value.trim())) {
@@ -692,7 +950,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
       
-      // Phone check (Israel mobile/standard)
       else if (input.type === 'tel' && input.value.trim()) {
         const phoneRegex = /^05\d[-]?\d{7}$|^0[23489][-]?\d{7}$/;
         if (!phoneRegex.test(input.value.trim().replace(/\s/g, ''))) {
@@ -700,7 +957,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
       
-      // Positive number check
       else if (input.type === 'number' && input.value.trim()) {
         const val = parseFloat(input.value);
         if (isNaN(val)) {
@@ -720,7 +976,6 @@ document.addEventListener('DOMContentLoaded', () => {
           errSpan.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> ${fieldError}`;
           formGroup.appendChild(errSpan);
 
-          // Bind input edit to clear error
           input.addEventListener('input', function clearErr() {
             formGroup.classList.remove('has-error');
             const err = formGroup.querySelector('.error-message');
@@ -731,7 +986,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // 3. Validate dynamic tables in the step (each row inputs are validated)
     const tables = stepEl.querySelectorAll('.dynamic-table');
     tables.forEach(table => {
       const rows = table.querySelectorAll('tbody tr');
@@ -759,10 +1013,9 @@ document.addEventListener('DOMContentLoaded', () => {
     return isValid;
   }
 
-  // --- DRAFT / STORAGE HANDLERS ---
-
   function saveDraft() {
     try {
+      updateComputedExpensesTotal();
       const data = getFormDataJSON();
       localStorage.setItem('financial_questionnaire_draft', JSON.stringify(data));
       localStorage.setItem('financial_questionnaire_step', currentStep);
@@ -785,13 +1038,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = JSON.parse(draftStr);
       if (!data) return;
 
-      // Clear dynamic tables to prevent duplication on reload
       clearAllDynamicTables();
 
-      // Populate basic inputs
       populateFields(data);
 
-      // Rebuild dynamic tables
       if (data.family && data.family.children) {
         data.family.children.forEach(child => addTableRow('childrenTable', child));
       }
@@ -800,6 +1050,9 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (data.additional_income) {
         data.additional_income.forEach(income => addTableRow('additionalIncomeTable', income));
+      }
+      if (data.expenses) {
+        initializeExpensesTable(data.expenses);
       }
       if (data.assets && data.assets.real_estate) {
         data.assets.real_estate.forEach(prop => addTableRow('realEstateTable', prop));
@@ -819,6 +1072,15 @@ document.addEventListener('DOMContentLoaded', () => {
       if (data.allowances) {
         data.allowances.forEach(allowance => addTableRow('allowancesTable', allowance));
       }
+      if (data.bank_accounts) {
+        data.bank_accounts.forEach(acc => addTableRow('bankAccountsTable', acc));
+      }
+      if (data.credit_cards) {
+        data.credit_cards.forEach(card => addTableRow('creditCardsTable', card));
+      }
+      if (data.pensions) {
+        data.pensions.forEach(pen => addTableRow('pensionsTable', pen));
+      }
       if (data.insurances) {
         data.insurances.forEach(insurance => addTableRow('insurancesTable', insurance));
       }
@@ -836,14 +1098,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       toggleConditionalFields();
+      updateComputedExpensesTotal();
 
-      // Restore visited steps
       const savedVisited = localStorage.getItem('financial_questionnaire_visited_steps');
       if (savedVisited) {
         const visitedArray = JSON.parse(savedVisited);
         visitedArray.forEach(s => visitedSteps.add(s));
       } else {
-        // Add valid steps from the draft to visitedSteps so they show green
         for (let s = 1; s <= TOTAL_STEPS; s++) {
           if (validateStep(s, true)) {
             visitedSteps.add(s);
@@ -851,7 +1112,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      // Restore current step
       const savedStep = localStorage.getItem('financial_questionnaire_step');
       if (savedStep) {
         goToStep(parseInt(savedStep));
@@ -863,17 +1123,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Populate basic inputs from nested JSON
   function populateFields(data, prefix = '') {
     Object.keys(data).forEach(key => {
       const val = data[key];
       if (val === null || val === undefined) return;
 
       if (typeof val === 'object' && !Array.isArray(val)) {
-        // Recurse into object
         populateFields(val, prefix ? `${prefix}[${key}]` : key);
       } else if (!Array.isArray(val)) {
-        // Resolve form field name
         const fieldName = prefix ? `${prefix}[${key}]` : key;
         const input = form.querySelector(`[name="${fieldName}"]`);
         
@@ -888,8 +1145,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // --- FORM DATA SERIALIZATION ---
-
   function getFormDataJSON() {
     return {
       general: {
@@ -902,7 +1157,7 @@ document.addEventListener('DOMContentLoaded', () => {
         email: document.getElementById('p1_email').value,
         address: document.getElementById('p1_address').value,
         age: parseNumber(document.getElementById('p1_age').value),
-        is_self_employed: p1SelfEmployedCheckbox.checked
+        employment_type: p1EmploymentTypeSelect.value
       },
       partner2: {
         first_name: document.getElementById('p2_first_name').value,
@@ -911,14 +1166,14 @@ document.addEventListener('DOMContentLoaded', () => {
         email: document.getElementById('p2_email').value,
         address: document.getElementById('p2_address').value,
         age: parseNumber(document.getElementById('p2_age').value),
-        is_self_employed: p2SelfEmployedCheckbox.checked
+        employment_type: p2EmploymentTypeSelect.value
       },
       family: {
         marital_status: maritalStatusSelect.value,
         marriage_duration: parseNumber(document.getElementById('marriage_duration').value),
         previous_marriage: previousMarriageSelect.value,
         notes: document.getElementById('family_notes').value,
-        children: serializeTable('childrenTable', ['name', 'gender', 'age', 'notes']),
+        children: serializeTable('childrenTable', ['name', 'gender', 'age', 'notes', 'general_notes']),
         close_circle: serializeTable('circleTable', ['close_to', 'relation', 'financial_status', 'can_help', 'needs_help', 'wealth_transfer', 'notes'])
       },
       income1: {
@@ -938,10 +1193,7 @@ document.addEventListener('DOMContentLoaded', () => {
         notes: document.getElementById('p2_income_notes').value
       },
       additional_income: serializeTable('additionalIncomeTable', ['source', 'amount', 'notes']),
-      expenses: {
-        total_amount: parseNumber(document.getElementById('total_monthly_expenses').value),
-        details: document.getElementById('expenses_details').value
-      },
+      expenses: serializeTable('expensesTable', ['category', 'month1', 'month2', 'month3', 'average', 'notes']),
       assets: {
         real_estate: serializeTable('realEstateTable', ['description', 'purchase_val', 'current_val', 'mortgage_orig', 'mortgage_rem', 'notes']),
         mortgages: serializeTable('mortgageTable', ['bank', 'track', 'orig', 'remaining', 'rate', 'end_date', 'monthly', 'notes']),
@@ -949,40 +1201,24 @@ document.addEventListener('DOMContentLoaded', () => {
         future_assets_details: document.getElementById('future_assets_details').value,
         financial_assets: serializeTable('financialAssetsTable', ['type', 'company', 'amount', 'notes'])
       },
-      bank: {
-        name: document.getElementById('bank_name').value,
-        owner: document.getElementById('bank_owner').value,
-        limit: parseNumber(document.getElementById('bank_limit').value),
-        usage: document.getElementById('bank_usage').value,
-        restricted: document.getElementById('bank_restricted').value,
-        credit_cards_details: document.getElementById('credit_cards_details').value
-      },
+      bank_accounts: serializeTable('bankAccountsTable', ['name', 'owner', 'limit', 'usage', 'restricted']),
+      credit_cards: serializeTable('creditCardsTable', ['owner', 'name', 'digits', 'limit', 'usage', 'notes']),
       assets_management: {
         tracking: document.getElementById('asset_tracking').value,
         risk_vs_yield: document.getElementById('risk_appetite').value,
         fees_check: document.getElementById('management_fees').value
       },
       liabilities: serializeTable('liabilitiesTable', ['lender', 'purpose', 'orig', 'current', 'monthly', 'start', 'end', 'rate']),
-      pension1: {
-        company: document.getElementById('p1_pension_company').value,
-        balance: parseNumber(document.getElementById('p1_pension_balance').value),
-        monthly_deposit: parseNumber(document.getElementById('p1_pension_deposit').value),
-        has_life_insurance: document.getElementById('p1_pension_has_life_insurance').value,
-        annuity_coefficient: parseNumber(document.getElementById('p1_pension_coefficient').value),
-        notes: document.getElementById('p1_pension_notes').value
-      },
-      pension2: {
-        company: document.getElementById('p2_pension_company').value,
-        balance: parseNumber(document.getElementById('p2_pension_balance').value),
-        monthly_deposit: parseNumber(document.getElementById('p2_pension_deposit').value),
-        has_life_insurance: document.getElementById('p2_pension_has_life_insurance').value,
-        annuity_coefficient: parseNumber(document.getElementById('p2_pension_coefficient').value),
-        notes: document.getElementById('p2_pension_notes').value
-      },
-      allowances: serializeTable('allowancesTable', ['source', 'amount', 'notes']),
+      pensions: serializeTable('pensionsTable', ['owner', 'company', 'is_executive_insurance', 'balance', 'monthly_deposit', 'has_life_insurance', 'annuity_coefficient', 'notes']),
+      allowances: serializeTable('allowancesTable', ['source', 'recipient', 'amount', 'notes']),
       insurances: serializeTable('insurancesTable', ['type', 'insured', 'company', 'premium', 'agent', 'cov_type']),
       
-      // Conditional parts (only gathered if visible)
+      toggles: {
+        single_parent: toggleSingleParentCheckbox.checked,
+        second_marriage: toggleSecondMarriageCheckbox.checked,
+        self_employed: toggleSelfEmployedCheckbox.checked
+      },
+      
       single_parent: !(condSingleParent.classList.contains('hidden')) ? {
         alimony_regular: document.getElementById('alimony_regular').value,
         ex_support_capability: document.getElementById('ex_support_capability').value,
@@ -1005,6 +1241,7 @@ document.addEventListener('DOMContentLoaded', () => {
       goals: {
         has_emergency_fund: hasEmergencyFundSelect.value,
         emergency_fund_amount: parseNumber(document.getElementById('emergency_fund_amount').value),
+        emergency_fund_location: document.getElementById('emergency_fund_location') ? document.getElementById('emergency_fund_location').value : '',
         capital_receipts: serializeTable('capitalReceiptsTable', ['source', 'amount', 'when', 'notes']),
         recurring_goals: serializeTable('recurringGoalsTable', ['description', 'freq', 'cost', 'notes']),
         one_time_goals: serializeTable('oneTimeGoalsTable', ['description', 'years', 'cost', 'notes']),
@@ -1014,14 +1251,12 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  // Parse strings to float/int, default to null or 0 if empty
   function parseNumber(val) {
     if (val === '' || val === null || val === undefined) return 0;
     const parsed = parseFloat(val);
     return isNaN(parsed) ? 0 : parsed;
   }
 
-  // Serializes dynamic table rows into an array of objects
   function serializeTable(tableId, fieldClasses) {
     const table = document.getElementById(tableId);
     if (!table) return [];
@@ -1038,18 +1273,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (input) {
           let val = input.value;
           if (input.type === 'number') {
-            val = parseNumber(val);
+            val = input.value === '' ? '' : parseNumber(val);
           } else if (input.type === 'checkbox') {
             val = input.checked;
           }
           obj[field] = val;
-          if (val !== '' && val !== 0 && val !== false) {
+          if (val !== '' && val !== false) {
             hasVal = true;
           }
         }
       });
 
-      // Avoid adding completely blank rows
       if (hasVal) {
         result.push(obj);
       }
@@ -1058,14 +1292,9 @@ document.addEventListener('DOMContentLoaded', () => {
     return result;
   }
 
-  // --- SUBMIT AND LOCAL DOWNLOAD FLOW ---
-
-  // --- SUBMIT AND LOCAL DOWNLOAD FLOW ---
-
   function submitForm() {
     const data = getFormDataJSON();
     
-    // Get partner names for dynamic filename
     const p1Name = document.getElementById('p1_first_name') ? document.getElementById('p1_first_name').value.trim() : '';
     const p2Name = document.getElementById('p2_first_name') ? document.getElementById('p2_first_name').value.trim() : '';
     
@@ -1079,10 +1308,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     filename += '.json';
 
-    // 1. Convert to string in UTF-8
     const jsonString = JSON.stringify(data, null, 2);
 
-    // 2. Generate Blob and trigger auto browser download
     try {
       const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
@@ -1097,11 +1324,9 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error('Error generating automatic download:', err);
     }
 
-    // 3. Clear local storage draft
     localStorage.removeItem('financial_questionnaire_draft');
     draftStatusText.textContent = 'השאלון הושלם והורד בהצלחה!';
 
-    // 4. Update Success Modal content dynamically to present the WhatsApp/Email instructions
     const modalHeaderH2 = successModal.querySelector('.modal-header h2');
     const modalHeaderP = successModal.querySelector('.modal-header p');
     const modalBody = successModal.querySelector('.modal-body');
@@ -1129,12 +1354,10 @@ document.addEventListener('DOMContentLoaded', () => {
       modalHeaderP.style.color = 'var(--color-primary-dark)';
     }
 
-    // 5. Hide the modal body (which contains the JSON preview)
     if (modalBody) {
       modalBody.classList.add('hidden');
     }
 
-    // Set up download button in modal to allow manual re-download
     downloadJsonBtn.textContent = 'הורד שוב קובץ JSON';
     downloadJsonBtn.onclick = () => {
       const reBlob = new Blob([jsonString], { type: 'application/json;charset=utf-8;' });
@@ -1166,8 +1389,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 5000);
   }
 
+  // Dynamic Auto-Resizing for Textareas
+  function initAutoResizeTextareas() {
+    function autoResize(el) {
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
+    }
+
+    // Delegate input event on the document level for all textareas
+    document.addEventListener('input', function (e) {
+      if (e.target && e.target.tagName.toLowerCase() === 'textarea') {
+        autoResize(e.target);
+      }
+    });
+
+    // Helper to resize all textareas currently in the DOM
+    window.resizeAllTextareas = function() {
+      document.querySelectorAll('textarea').forEach(textarea => {
+        textarea.style.resize = 'none';
+        textarea.style.overflowY = 'hidden';
+        autoResize(textarea);
+      });
+    };
+
+    // Run initially
+    window.resizeAllTextareas();
+  }
+
   // --- INITIAL LAUNCH ---
   
+  // Set up auto-resizing textareas
+  initAutoResizeTextareas();
+
   // Try loading draft
   loadDraft();
 
@@ -1177,9 +1430,39 @@ document.addEventListener('DOMContentLoaded', () => {
     addTableRow('childrenTable');
   }
 
+  // If no bank rows exist, add a default blank row to the bankAccountsTable
+  const bankRows = document.querySelectorAll('#bankAccountsTable tbody tr');
+  if (bankRows.length === 0) {
+    addTableRow('bankAccountsTable');
+  }
+
+  // If no credit card rows exist, add a default blank row to the creditCardsTable
+  const creditCardRows = document.querySelectorAll('#creditCardsTable tbody tr');
+  if (creditCardRows.length === 0) {
+    addTableRow('creditCardsTable');
+  }
+
+  // If no pension rows exist, add a default blank row to the pensionsTable
+  const pensionRows = document.querySelectorAll('#pensionsTable tbody tr');
+  if (pensionRows.length === 0) {
+    addTableRow('pensionsTable');
+  }
+
+  // If no expenses rows exist, initialize the table
+  const expensesRows = document.querySelectorAll('#expensesTable tbody tr');
+  if (expensesRows.length === 0) {
+    initializeExpensesTable();
+  }
+
   // Check conditional visibility on load
   toggleConditionalFields();
+  updateComputedExpensesTotal();
 
   // Validate all steps to color indicators on start
   validateAllStepsDots();
+
+  // Perform initial resize of all textareas to fit loaded values
+  setTimeout(() => {
+    if (window.resizeAllTextareas) window.resizeAllTextareas();
+  }, 100);
 });
