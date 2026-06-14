@@ -383,12 +383,19 @@ document.addEventListener('DOMContentLoaded', () => {
       if (existingRow) {
         Object.keys(item).forEach(key => {
           if (key === 'category') return;
-          const input = existingRow.querySelector(`.cell-${key}`);
+          let input = existingRow.querySelector(`.cell-${key}`);
+          if (!input) {
+            const hyphenatedKey = key.replace(/_/g, '-');
+            input = existingRow.querySelector(`.cell-${hyphenatedKey}`);
+          }
           if (input) {
             if (input.type === 'checkbox') {
               input.checked = item[key];
             } else {
               input.value = item[key];
+              if (input.getAttribute('data-original-type') === 'number' && shouldFormatField(key)) {
+                input.value = formatNumberWithCommas(item[key]);
+              }
             }
           }
         });
@@ -502,9 +509,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const m2Val = row.querySelector('.cell-month2')?.value;
       const m3Val = row.querySelector('.cell-month3')?.value;
 
-      const m1 = parseFloat(m1Val);
-      const m2 = parseFloat(m2Val);
-      const m3 = parseFloat(m3Val);
+      const m1 = parseNumber(m1Val);
+      const m2 = parseNumber(m2Val);
+      const m3 = parseNumber(m3Val);
 
       let sum = 0;
       let count = 0;
@@ -517,7 +524,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const avgInput = row.querySelector('.cell-average');
       if (avgInput) {
-        avgInput.value = count > 0 ? Math.round(avg) : '';
+        avgInput.value = count > 0 ? formatNumberWithCommas(Math.round(avg)) : '';
       }
       total += avg;
     });
@@ -804,14 +811,47 @@ document.addEventListener('DOMContentLoaded', () => {
     row.innerHTML = TABLE_TEMPLATES[tableName]();
     tableBody.appendChild(row);
 
+    // Convert number inputs in the new row to text for comma formatting
+    row.querySelectorAll('input[type="number"]').forEach(input => {
+      const nameOrId = input.className || input.name;
+      if (shouldFormatField(nameOrId)) {
+        input.setAttribute('data-original-type', 'number');
+        input.type = 'text';
+        input.classList.add('formatted-number-input');
+        input.inputMode = 'numeric';
+
+        input.addEventListener('focus', function(e) {
+          e.target.value = cleanCommas(e.target.value);
+        });
+        
+        input.addEventListener('blur', function(e) {
+          e.target.value = formatNumberWithCommas(e.target.value);
+        });
+
+        input.addEventListener('input', function(e) {
+          const cleaned = e.target.value.replace(/[^\d.,-]/g, '');
+          if (e.target.value !== cleaned) {
+            e.target.value = cleaned;
+          }
+        });
+      }
+    });
+
     if (initialData) {
       Object.keys(initialData).forEach(key => {
-        const input = row.querySelector(`.cell-${key}`);
+        let input = row.querySelector(`.cell-${key}`);
+        if (!input) {
+          const hyphenatedKey = key.replace(/_/g, '-');
+          input = row.querySelector(`.cell-${hyphenatedKey}`);
+        }
         if (input) {
           if (input.type === 'checkbox') {
             input.checked = initialData[key];
           } else {
             input.value = initialData[key];
+            if (input.getAttribute('data-original-type') === 'number' && shouldFormatField(key)) {
+              input.value = formatNumberWithCommas(input.value);
+            }
           }
         }
       });
@@ -957,8 +997,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
       
-      else if (input.type === 'number' && input.value.trim()) {
-        const val = parseFloat(input.value);
+      else if ((input.type === 'number' || input.getAttribute('data-original-type') === 'number') && input.value.trim()) {
+        const val = parseNumber(input.value);
         if (isNaN(val)) {
           fieldError = 'נא להזין מספר תקין';
         } else if (val < 0) {
@@ -1139,6 +1179,9 @@ document.addEventListener('DOMContentLoaded', () => {
             input.checked = !!val;
           } else {
             input.value = val;
+            if (input.getAttribute('data-original-type') === 'number' && shouldFormatField(input.name || input.id)) {
+              input.value = formatNumberWithCommas(val);
+            }
           }
         }
       }
@@ -1253,8 +1296,79 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function parseNumber(val) {
     if (val === '' || val === null || val === undefined) return 0;
-    const parsed = parseFloat(val);
+    const clean = val.toString().replace(/,/g, '');
+    const parsed = parseFloat(clean);
     return isNaN(parsed) ? 0 : parsed;
+  }
+
+  // Helper to format numbers with commas (e.g. 1000 -> 1,000)
+  function formatNumberWithCommas(val) {
+    if (val === undefined || val === null || val === '') return '';
+    const clean = val.toString().replace(/,/g, '');
+    if (isNaN(clean) || clean === '') return val;
+    const parts = clean.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return parts.join('.');
+  }
+
+  // Helper to strip commas
+  function cleanCommas(val) {
+    if (val === undefined || val === null) return '';
+    return val.toString().replace(/,/g, '');
+  }
+
+  // Helper to check if a field needs formatting with commas
+  function shouldFormatField(nameOrId) {
+    if (!nameOrId) return false;
+    const lower = nameOrId.toString().toLowerCase();
+    if (lower.includes('age') || 
+        lower.includes('year') || 
+        lower.includes('duration') || 
+        lower.includes('freq') || 
+        lower.includes('digits') || 
+        lower.includes('coefficient') || 
+        lower.includes('rate') ||
+        lower.includes('phone') ||
+        lower.includes('email') ||
+        lower.includes('date')
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  // Dynamic Conversion of Number Inputs to Text Inputs for Comma Formatting
+  function initNumberInputsFormatting() {
+    const numberInputs = document.querySelectorAll('input[type="number"]');
+    
+    numberInputs.forEach(input => {
+      const nameOrId = input.id || input.name || input.className;
+      if (shouldFormatField(nameOrId)) {
+        input.setAttribute('data-original-type', 'number');
+        input.type = 'text';
+        input.classList.add('formatted-number-input');
+        input.inputMode = 'numeric';
+        
+        if (input.value) {
+          input.value = formatNumberWithCommas(input.value);
+        }
+        
+        input.addEventListener('focus', function(e) {
+          e.target.value = cleanCommas(e.target.value);
+        });
+        
+        input.addEventListener('blur', function(e) {
+          e.target.value = formatNumberWithCommas(e.target.value);
+        });
+
+        input.addEventListener('input', function(e) {
+          const cleaned = e.target.value.replace(/[^\d.,-]/g, '');
+          if (e.target.value !== cleaned) {
+            e.target.value = cleaned;
+          }
+        });
+      }
+    });
   }
 
   function serializeTable(tableId, fieldClasses) {
@@ -1269,10 +1383,14 @@ document.addEventListener('DOMContentLoaded', () => {
       let hasVal = false;
       
       fieldClasses.forEach(field => {
-        const input = row.querySelector(`.cell-${field}`);
+        let input = row.querySelector(`.cell-${field}`);
+        if (!input) {
+          const hyphenatedField = field.replace(/_/g, '-');
+          input = row.querySelector(`.cell-${hyphenatedField}`);
+        }
         if (input) {
           let val = input.value;
-          if (input.type === 'number') {
+          if (input.type === 'number' || input.getAttribute('data-original-type') === 'number') {
             val = input.value === '' ? '' : parseNumber(val);
           } else if (input.type === 'checkbox') {
             val = input.checked;
@@ -1420,6 +1538,9 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Set up auto-resizing textareas
   initAutoResizeTextareas();
+
+  // Initialize number formatting for statically defined number inputs in the HTML
+  initNumberInputsFormatting();
 
   // Try loading draft
   loadDraft();
