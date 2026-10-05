@@ -32,10 +32,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const hasEmergencyFundSelect = document.getElementById('has_emergency_fund');
   const emergencyFundAmountContainer = document.getElementById('emergency_fund_amount_container');
   
+  // Webhook Integration Configuration
+  const N8N_WEBHOOK_URL = 'https://n8n.invite2you.com/webhook/financial-survey';
+
   // Modal Elements
   const successModal = document.getElementById('successModal');
-  const jsonPreview = document.getElementById('jsonPreview');
-  const downloadJsonBtn = document.getElementById('downloadJsonBtn');
   const closeModalBtn = document.getElementById('closeModalBtn');
   
   // Draft Status Elements
@@ -46,10 +47,89 @@ document.addEventListener('DOMContentLoaded', () => {
   const jsonFileInput = document.getElementById('jsonFileInput');
   const notification = document.getElementById('notification');
 
+  // Floating Action Bar Elements
+  const floatingActionBar = document.getElementById('floatingActionBar');
+  const floatingBackBtn = document.getElementById('floatingBackBtn');
+  const floatingNextBtn = document.getElementById('floatingNextBtn');
+  const floatingStepBadge = document.getElementById('floatingStepBadge');
+  const floatingStepName = document.getElementById('floatingStepName');
+  const floatingSaveText = document.getElementById('floatingSaveText');
+
+  // Mobile Recommendation Modal
+  const mobileRecModal = document.getElementById('mobileRecommendationModal');
+  const continueOnMobileBtn = document.getElementById('continueOnMobileBtn');
+  const sendSelfWhatsappBtn = document.getElementById('sendSelfWhatsappBtn');
+
+  // Prep Checklist
+  const prepChecklistToggle = document.getElementById('prepChecklistToggle');
+  const prepChecklistCard = document.getElementById('prepChecklistCard');
+
+  // Expenses Filter
+  const expenseSearchInput = document.getElementById('expenseSearchInput');
+  const clearExpenseSearch = document.getElementById('clearExpenseSearch');
+  const expenseCategoryTabs = document.getElementById('expenseCategoryTabs');
+
+  // Sticky Step Sidebar Elements
+  const stepSidebar = document.getElementById('stepSidebar');
+  const sidebarStepBadge = document.getElementById('sidebarStepBadge');
+  const sidebarNavList = document.getElementById('sidebarNavList');
+  const sidebarProgressBar = document.getElementById('sidebarProgressBar');
+  const sidebarScrollTopBtn = document.getElementById('sidebarScrollTopBtn');
+
   // --- STATE ---
   let currentStep = 1;
   const TOTAL_STEPS = 5;
   const visitedSteps = new Set();
+
+  const STEP_TITLES = {
+    1: 'פרטים אישיים ומצב משפחתי',
+    2: 'תזרים חודשי',
+    3: 'מאזן נכסים והתחייבויות',
+    4: 'פנסיה וביטוח',
+    5: 'יעדים וציפיות'
+  };
+
+  const STEP_SECTIONS = {
+    1: [
+      { id: 'prepChecklistCard', title: 'הכנת מסמכים', icon: '📋' },
+      { id: 'partner1_fieldset', title: 'בן/בת זוג 1 (עיקרי)', icon: '👤' },
+      { id: 'partner2_fieldset', title: 'בן/בת זוג 2', icon: '👥' },
+      { id: 'family_status_fieldset', title: 'מצב משפחתי', icon: '💍' },
+      { id: 'children_section', title: 'ילדים', icon: '👶' },
+      { id: 'circle_section', title: 'מעגל קרוב', icon: '🤝' }
+    ],
+    2: [
+      { id: 'step2KpiCard', title: 'תזרים חודשי חי', icon: '📊' },
+      { id: 'p1_income_fieldset', title: 'הכנסות בן זוג 1', icon: '💰' },
+      { id: 'p2_income_fieldset', title: 'הכנסות בן זוג 2', icon: '💵' },
+      { id: 'additional_income_section', title: 'הכנסות נוספות', icon: '➕' },
+      { id: 'expenses_section', title: 'פירוט הוצאות', icon: '💳' }
+    ],
+    3: [
+      { id: 'step3KpiCard', title: 'מאזן שווי נקי חי', icon: '📈' },
+      { id: 'real_estate_section', title: 'נדל"ן ונכסים', icon: '🏠' },
+      { id: 'mortgages_section', title: 'משכנתאות', icon: '📜' },
+      { id: 'vehicles_section', title: 'רכבים וכלי תחבורה', icon: '🚗' },
+      { id: 'bank_accounts_section', title: 'חשבונות בנק ועו"ש', icon: '🏦' },
+      { id: 'credit_cards_section', title: 'כרטיסי אשראי', icon: '💳' },
+      { id: 'financial_assets_section', title: 'נכסים פיננסיים', icon: '🪙' },
+      { id: 'liabilities_section', title: 'הלוואות והתחייבויות', icon: '📉' }
+    ],
+    4: [
+      { id: 'pensions_section', title: 'פנסיה ומנהלים', icon: '🏦' },
+      { id: 'allowances_section', title: 'קצבאות', icon: '🎁' },
+      { id: 'insurances_section', title: 'ביטוחים', icon: '🛡️' },
+      { id: 'special_cases_section', title: 'מקרים מיוחדים', icon: '⚡' }
+    ],
+    5: [
+      { id: 'emergency_fund_fieldset', title: 'קרן חירום ויציבות', icon: '🛡️' },
+      { id: 'capital_receipts_section', title: 'תקבולים צפויים', icon: '💰' },
+      { id: 'recurring_goals_section', title: 'יעדים חוזרים', icon: '🔄' },
+      { id: 'one_time_goals_section', title: 'יעדים חד-פעמיים', icon: '🎯' },
+      { id: 'children_goals_section', title: 'יעדים לילדים', icon: '🎓' },
+      { id: 'expectations_fieldset', title: 'ציפיות מהייעוץ', icon: '💡' }
+    ]
+  };
 
   // --- DYNAMIC TABLE CELL TEMPLATES ---
   const TABLE_TEMPLATES = {
@@ -352,6 +432,88 @@ document.addEventListener('DOMContentLoaded', () => {
     'מזונות', 'תמיכה בבני המשפחה', 'הוצאות ריפוי', 'סיגריות', 'מזומן ללא מעקב'
   ];
 
+  const EXPENSE_CATEGORY_MAP = {
+    'משכתנתא': 'housing',
+    'שכ"ד': 'housing',
+    'חשמל': 'housing',
+    'גז': 'housing',
+    'ארנונה ומים': 'housing',
+    'וועד בית': 'housing',
+    'עוזרת': 'housing',
+    'אחזקת בית ותיקונים': 'housing',
+    'אינטרנט': 'housing',
+    'טלפון קווי': 'housing',
+    'טלפון סלולרי': 'housing',
+    'דלק': 'transport',
+    'תחבורה ציבורית': 'transport',
+    'אחזקת רכב ותיקונים': 'transport',
+    'ביטוח (חובה ומקיף)': 'transport',
+    'טסט': 'transport',
+    'מטפלת/שמרטף/מעון/גן': 'kids',
+    'ביה"ס וחומרי לימוד': 'kids',
+    'חוגים': 'kids',
+    'דמי כיס': 'kids',
+    'מזון ומכולת': 'food',
+    'ביגוד והנעלה': 'food',
+    'מספרה': 'food',
+    'קוסמטיקה': 'food',
+    'סיגריות': 'food',
+    'נסיעות לחו"ל וחופשות': 'leisure',
+    'קאנטרי קלאב': 'leisure',
+    'מסעדות סרטים והצגות': 'leisure',
+    'כבלים': 'leisure',
+    'מנויים': 'leisure',
+    'עיתונים': 'leisure',
+    'ביטוח בריאות משלים': 'finance',
+    'ביטוח בריאות פרטי': 'finance',
+    'ביטוח חיים': 'finance',
+    'ביטוח דירה': 'finance',
+    'הלוואות': 'finance',
+    'עמלות וריבית': 'finance',
+    'חיסכון': 'finance',
+    'הקצאה להוצאות בלת"מ': 'finance',
+    'מתנות (משפחה, אירועים)': 'other',
+    'מזונות': 'other',
+    'תמיכה בבני המשפחה': 'other',
+    'הוצאות ריפוי': 'other',
+    'מזומן ללא מעקב': 'other'
+  };
+
+  function getExpenseCategory(categoryName) {
+    if (!categoryName) return 'other';
+    const trimmed = categoryName.trim();
+    if (EXPENSE_CATEGORY_MAP[trimmed]) return EXPENSE_CATEGORY_MAP[trimmed];
+    for (const [key, cat] of Object.entries(EXPENSE_CATEGORY_MAP)) {
+      if (trimmed.includes(key) || key.includes(trimmed)) return cat;
+    }
+    return 'other';
+  }
+
+  function filterExpenses() {
+    const activeCat = expenseCategoryTabs?.querySelector('.cat-pill.active')?.getAttribute('data-cat') || 'all';
+    const query = expenseSearchInput?.value.trim().toLowerCase() || '';
+
+    const rows = document.querySelectorAll('#expensesTable tbody tr');
+    rows.forEach(row => {
+      const rowCat = row.getAttribute('data-category') || 'other';
+      const categoryInput = row.querySelector('.cell-category');
+      const catText = (categoryInput ? categoryInput.value : '').toLowerCase();
+
+      const matchesCat = (activeCat === 'all') || (rowCat === activeCat);
+      const matchesQuery = !query || catText.includes(query);
+
+      if (matchesCat && matchesQuery) {
+        row.style.display = '';
+      } else {
+        row.style.display = 'none';
+      }
+    });
+
+    if (clearExpenseSearch) {
+      clearExpenseSearch.classList.toggle('hidden', !query);
+    }
+  }
+
   function initializeExpensesTable(expensesDraft = null) {
     const tbody = document.querySelector('#expensesTable tbody');
     if (!tbody) return;
@@ -534,15 +696,112 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function updateLiveFinancialKPIs() {
+    // --- STEP 2: Monthly Cashflow ---
+    const p1Type = p1EmploymentTypeSelect ? p1EmploymentTypeSelect.value : 'employee';
+    const p1Emp = p1Type !== 'self_employed' ? parseNumber(document.getElementById('p1_employee_income')?.value) : 0;
+    const p1Bonus = p1Type !== 'self_employed' ? parseNumber(document.getElementById('p1_bonuses')?.value) / 12 : 0;
+    const p1Self = p1Type === 'self_employed' ? parseNumber(document.getElementById('p1_self_employed_income')?.value) : 0;
+
+    const p2Type = p2EmploymentTypeSelect ? p2EmploymentTypeSelect.value : 'employee';
+    const p2Emp = p2Type !== 'self_employed' ? parseNumber(document.getElementById('p2_employee_income')?.value) : 0;
+    const p2Bonus = p2Type !== 'self_employed' ? parseNumber(document.getElementById('p2_bonuses')?.value) / 12 : 0;
+    const p2Self = p2Type === 'self_employed' ? parseNumber(document.getElementById('p2_self_employed_income')?.value) : 0;
+
+    let additionalIncome = 0;
+    document.querySelectorAll('#additionalIncomeTable tbody tr').forEach(r => {
+      additionalIncome += parseNumber(r.querySelector('.cell-amount')?.value);
+    });
+
+    const totalIncome = Math.round(p1Emp + p1Bonus + p1Self + p2Emp + p2Bonus + p2Self + additionalIncome);
+    
+    let totalExpenses = 0;
+    document.querySelectorAll('#expensesTable tbody tr').forEach(r => {
+      const avg = parseNumber(r.querySelector('.cell-average')?.value);
+      totalExpenses += avg;
+    });
+    totalExpenses = Math.round(totalExpenses);
+
+    const freeCashflow = totalIncome - totalExpenses;
+
+    const kpiTotalIncomeEl = document.getElementById('kpiTotalIncome');
+    const kpiTotalExpensesEl = document.getElementById('kpiTotalExpenses');
+    const kpiFreeCashflowEl = document.getElementById('kpiFreeCashflow');
+    const kpiCashflowHintEl = document.getElementById('kpiCashflowHint');
+
+    if (kpiTotalIncomeEl) kpiTotalIncomeEl.textContent = `${totalIncome.toLocaleString('he-IL')} ₪`;
+    if (kpiTotalExpensesEl) kpiTotalExpensesEl.textContent = `${totalExpenses.toLocaleString('he-IL')} ₪`;
+    if (kpiFreeCashflowEl) {
+      kpiFreeCashflowEl.textContent = `${(freeCashflow > 0 ? '+' : '')}${freeCashflow.toLocaleString('he-IL')} ₪`;
+      kpiFreeCashflowEl.className = `kpi-val text-cashflow ${freeCashflow >= 0 ? 'positive' : 'negative'}`;
+    }
+    if (kpiCashflowHintEl) {
+      if (freeCashflow > 0) {
+        kpiCashflowHintEl.textContent = 'עודף תזרימי חיובי לחיסכון, השקעה ויעדים';
+      } else if (freeCashflow < 0) {
+        kpiCashflowHintEl.textContent = 'גירעון תזרימי חודשי (הוצאות עולות על הכנסות)';
+      } else {
+        kpiCashflowHintEl.textContent = 'תזרים מאוזן';
+      }
+    }
+
+    // --- STEP 3: Balance Sheet (Net Worth) ---
+    let realEstateVal = 0;
+    let realEstateMortgage = 0;
+    document.querySelectorAll('#realEstateTable tbody tr').forEach(r => {
+      realEstateVal += parseNumber(r.querySelector('.cell-current-val')?.value);
+      realEstateMortgage += parseNumber(r.querySelector('.cell-mortgage-rem')?.value);
+    });
+
+    let vehiclesVal = 0;
+    document.querySelectorAll('#vehiclesTable tbody tr').forEach(r => {
+      vehiclesVal += parseNumber(r.querySelector('.cell-value')?.value);
+    });
+
+    let financialAssetsVal = 0;
+    document.querySelectorAll('#financialAssetsTable tbody tr').forEach(r => {
+      financialAssetsVal += parseNumber(r.querySelector('.cell-amount')?.value);
+    });
+
+    const totalAssets = Math.round(realEstateVal + vehiclesVal + financialAssetsVal);
+
+    let mortgageTableRemaining = 0;
+    document.querySelectorAll('#mortgageTable tbody tr').forEach(r => {
+      mortgageTableRemaining += parseNumber(r.querySelector('.cell-remaining')?.value);
+    });
+    const mortgageTotal = Math.max(realEstateMortgage, mortgageTableRemaining);
+
+    let otherLiabilities = 0;
+    document.querySelectorAll('#liabilitiesTable tbody tr').forEach(r => {
+      otherLiabilities += parseNumber(r.querySelector('.cell-current')?.value);
+    });
+
+    const totalLiabilities = Math.round(mortgageTotal + otherLiabilities);
+    const netWorth = totalAssets - totalLiabilities;
+
+    const kpiTotalAssetsEl = document.getElementById('kpiTotalAssets');
+    const kpiTotalLiabilitiesEl = document.getElementById('kpiTotalLiabilities');
+    const kpiNetWorthEl = document.getElementById('kpiNetWorth');
+
+    if (kpiTotalAssetsEl) kpiTotalAssetsEl.textContent = `${totalAssets.toLocaleString('he-IL')} ₪`;
+    if (kpiTotalLiabilitiesEl) kpiTotalLiabilitiesEl.textContent = `${totalLiabilities.toLocaleString('he-IL')} ₪`;
+    if (kpiNetWorthEl) {
+      kpiNetWorthEl.textContent = `${(netWorth > 0 ? '+' : '')}${netWorth.toLocaleString('he-IL')} ₪`;
+      kpiNetWorthEl.className = `kpi-val text-networth ${netWorth >= 0 ? 'positive' : 'negative'}`;
+    }
+  }
+
   form.addEventListener('input', () => {
     saveDraft();
     validateAllStepsDots();
     updateComputedExpensesTotal();
+    updateLiveFinancialKPIs();
   });
   form.addEventListener('change', () => {
     saveDraft();
     toggleConditionalFields();
     validateAllStepsDots();
+    updateLiveFinancialKPIs();
   });
 
   clearDraftBtn.addEventListener('click', () => {
@@ -801,6 +1060,102 @@ document.addEventListener('DOMContentLoaded', () => {
       nextBtn.innerHTML = `הבא <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>`;
       nextBtn.className = 'btn-nav btn-next';
     }
+
+    // Update Floating Sticky Action Bar
+    if (floatingStepBadge) floatingStepBadge.textContent = `שלב ${stepNum} מתוך ${TOTAL_STEPS}`;
+    if (floatingStepName) floatingStepName.textContent = STEP_TITLES[stepNum] || '';
+    if (floatingBackBtn) floatingBackBtn.disabled = stepNum === 1;
+    if (floatingNextBtn) {
+      if (stepNum === TOTAL_STEPS) {
+        floatingNextBtn.innerHTML = `שלח שאלון <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+        floatingNextBtn.className = 'btn-nav btn-submit';
+      } else {
+        floatingNextBtn.innerHTML = `הבא <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>`;
+        floatingNextBtn.className = 'btn-nav btn-next';
+      }
+    }
+
+    // Update Sticky Sidebar Navigation for the new step
+    renderSidebarNav(stepNum);
+  }
+
+  let scrollSpyObserver = null;
+
+  function renderSidebarNav(stepNumber) {
+    if (!sidebarNavList) return;
+    
+    if (sidebarStepBadge) {
+      sidebarStepBadge.textContent = `שלב ${stepNumber} מתוך ${TOTAL_STEPS}`;
+    }
+
+    const sections = STEP_SECTIONS[stepNumber] || [];
+    sidebarNavList.innerHTML = '';
+
+    if (sections.length === 0) {
+      if (stepSidebar) stepSidebar.style.display = 'none';
+      return;
+    }
+    if (stepSidebar) stepSidebar.style.display = '';
+
+    sections.forEach((sec, idx) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `sidebar-nav-item ${idx === 0 ? 'active' : ''}`;
+      btn.setAttribute('data-target-id', sec.id);
+      btn.innerHTML = `
+        <span class="nav-icon">${sec.icon}</span>
+        <span class="nav-text">${sec.title}</span>
+        <span class="nav-indicator"></span>
+      `;
+
+      btn.addEventListener('click', () => {
+        const targetEl = document.getElementById(sec.id);
+        if (targetEl) {
+          if (sec.id === 'prepChecklistCard' && prepChecklistCard?.classList.contains('collapsed')) {
+            prepChecklistCard.classList.remove('collapsed');
+          }
+          targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          
+          sidebarNavList.querySelectorAll('.sidebar-nav-item').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+        }
+      });
+
+      sidebarNavList.appendChild(btn);
+    });
+
+    setupScrollSpy(stepNumber);
+  }
+
+  function setupScrollSpy(stepNumber) {
+    if (scrollSpyObserver) {
+      scrollSpyObserver.disconnect();
+    }
+
+    const sections = STEP_SECTIONS[stepNumber] || [];
+    const elementsToObserve = sections
+      .map(s => document.getElementById(s.id))
+      .filter(Boolean);
+
+    if (elementsToObserve.length === 0) return;
+
+    scrollSpyObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const targetId = entry.target.id;
+          const matchingBtn = sidebarNavList.querySelector(`[data-target-id="${targetId}"]`);
+          if (matchingBtn) {
+            sidebarNavList.querySelectorAll('.sidebar-nav-item').forEach(b => b.classList.remove('active'));
+            matchingBtn.classList.add('active');
+          }
+        }
+      });
+    }, {
+      rootMargin: '-10% 0px -55% 0px',
+      threshold: 0.05
+    });
+
+    elementsToObserve.forEach(el => scrollSpyObserver.observe(el));
   }
 
   function addTableRow(tableName, initialData = null) {
@@ -810,6 +1165,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const row = document.createElement('tr');
     row.innerHTML = TABLE_TEMPLATES[tableName]();
     tableBody.appendChild(row);
+
+    // If this is the expenses table, assign category attribute
+    if (tableName === 'expensesTable') {
+      const initialCat = (initialData && initialData.category) ? initialData.category : '';
+      row.setAttribute('data-category', getExpenseCategory(initialCat));
+
+      const catInput = row.querySelector('.cell-category');
+      if (catInput) {
+        catInput.addEventListener('input', () => {
+          row.setAttribute('data-category', getExpenseCategory(catInput.value));
+        });
+      }
+    }
 
     // Convert number inputs in the new row to text for comma formatting
     row.querySelectorAll('input[type="number"]').forEach(input => {
@@ -851,6 +1219,26 @@ document.addEventListener('DOMContentLoaded', () => {
             input.value = initialData[key];
             if (input.getAttribute('data-original-type') === 'number' && shouldFormatField(key)) {
               input.value = formatNumberWithCommas(input.value);
+            }
+          }
+        }
+      });
+    }
+
+    // Tab key Excel navigation: automatically add row when pressing Tab on the last field of the last row
+    const focusableCells = row.querySelectorAll('input, select, textarea');
+    if (focusableCells.length > 0) {
+      const lastCell = focusableCells[focusableCells.length - 1];
+      lastCell.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab' && !e.shiftKey) {
+          const tbody = row.parentElement;
+          if (tbody && row === tbody.lastElementChild) {
+            e.preventDefault();
+            const newRow = addTableRow(tableName);
+            saveDraft();
+            if (newRow) {
+              const firstFocusable = newRow.querySelector('input, select, textarea');
+              if (firstFocusable) firstFocusable.focus();
             }
           }
         }
@@ -1050,6 +1438,22 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
 
+    // Scroll to first invalid field and apply shake animation
+    if (!isValid && !silent) {
+      setTimeout(() => {
+        const firstErrorEl = stepEl.querySelector('.form-group.has-error, input[style*="var(--color-error)"], textarea[style*="var(--color-error)"]');
+        if (firstErrorEl) {
+          firstErrorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          firstErrorEl.classList.add('shake-highlight');
+          setTimeout(() => firstErrorEl.classList.remove('shake-highlight'), 800);
+          const focusTarget = firstErrorEl.querySelector('input, select, textarea') || firstErrorEl;
+          if (focusTarget && typeof focusTarget.focus === 'function') {
+            try { focusTarget.focus(); } catch (err) {}
+          }
+        }
+      }, 50);
+    }
+
     return isValid;
   }
 
@@ -1064,6 +1468,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const now = new Date();
       const timeStr = now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       draftStatusText.textContent = `נשמר אוטומטית כטיוטה ב- ${timeStr}`;
+      if (floatingSaveText) {
+        floatingSaveText.textContent = `טיוטה נשמרה ב- ${timeStr}`;
+      }
     } catch (e) {
       console.error('Error saving draft:', e);
       draftStatusText.textContent = 'שגיאה בשמירת טיוטה מקומית';
@@ -1139,6 +1546,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       toggleConditionalFields();
       updateComputedExpensesTotal();
+      updateLiveFinancialKPIs();
 
       const savedVisited = localStorage.getItem('financial_questionnaire_visited_steps');
       if (savedVisited) {
@@ -1410,24 +1818,85 @@ document.addEventListener('DOMContentLoaded', () => {
     return result;
   }
 
-  function submitForm() {
+  async function submitForm() {
     const data = getFormDataJSON();
     
-    const p1Name = document.getElementById('p1_first_name') ? document.getElementById('p1_first_name').value.trim() : '';
-    const p2Name = document.getElementById('p2_first_name') ? document.getElementById('p2_first_name').value.trim() : '';
+    const p1Name = document.getElementById('p1_first_name')?.value?.trim() || '';
+    const p2Name = document.getElementById('p2_first_name')?.value?.trim() || '';
+    const clientName = (p1Name && p2Name) ? `${p1Name} ו${p2Name}` : (p1Name || 'הלקוח');
+
+    // Loading state for submission buttons
+    nextBtn.disabled = true;
+    const originalNextBtnHtml = nextBtn.innerHTML;
+    nextBtn.innerHTML = `שולח נתונים מאובטחים ליועץ... ⏳`;
     
-    let filename = 'נתונים פיננסים';
-    if (p1Name && p2Name) {
-      filename += ` ${p1Name} ו${p2Name}`;
-    } else if (p1Name) {
-      filename += ` ${p1Name}`;
-    } else if (p2Name) {
-      filename += ` ${p2Name}`;
+    if (floatingNextBtn) {
+      floatingNextBtn.disabled = true;
+      floatingNextBtn.innerHTML = `שולח נתונים... ⏳`;
     }
-    filename += '.json';
 
+    try {
+      // Direct POST to n8n Webhook
+      const response = await fetch(N8N_WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) {
+        console.warn('n8n Webhook returned non-200 status:', response.status);
+      }
+
+      // Clear draft storage after successful transmission
+      localStorage.removeItem('financial_questionnaire_draft');
+      if (draftStatusText) draftStatusText.textContent = 'השאלון נשלח בהצלחה ליועץ!';
+      if (floatingSaveText) floatingSaveText.textContent = 'השאלון נשלח בהצלחה ליועץ!';
+
+      // Show completion experience
+      showSuccessModal(data, clientName);
+    } catch (err) {
+      console.error('Error submitting questionnaire to webhook:', err);
+      showNotification('חלה בעיית תקשורת זמנית בשליחה לענן, אך כל הנתונים שמורים בדפדפן! לחץ שוב או שמור עותק גיבוי.', 'error');
+    } finally {
+      nextBtn.disabled = false;
+      nextBtn.innerHTML = originalNextBtnHtml;
+      if (floatingNextBtn) {
+        floatingNextBtn.disabled = false;
+        floatingNextBtn.innerHTML = originalNextBtnHtml;
+      }
+    }
+  }
+
+  function showSuccessModal(data, clientName) {
+    const waBtn1 = document.getElementById('successWhatsappBtn1');
+    const waBtn2 = document.getElementById('successWhatsappBtn2');
+    const downloadPdfBtn = document.getElementById('downloadPdfBtn');
+    const downloadJsonBackupBtn = document.getElementById('downloadJsonBackupBtn');
+
+    const waMsgEitan = encodeURIComponent(`היי איתן, סיימתי למלא את שאלון הייעוץ הפיננסי באתר עבור ${clientName}. כל הנתונים נשלחו בהצלחה למערכת!`);
+    const waMsgMaor = encodeURIComponent(`היי מאור, סיימתי למלא את שאלון הייעוץ הפיננסי באתר עבור ${clientName}. כל הנתונים נשלחו בהצלחה למערכת!`);
+    
+    if (waBtn1) waBtn1.href = `https://wa.me/972584442400?text=${waMsgEitan}`;
+    if (waBtn2) waBtn2.href = `https://wa.me/972503333164?text=${waMsgMaor}`;
+
+    if (downloadPdfBtn) {
+      downloadPdfBtn.onclick = () => generateAndPrintPdfSummary(data, clientName);
+    }
+
+    if (downloadJsonBackupBtn) {
+      downloadJsonBackupBtn.onclick = () => downloadJsonFile(data, clientName);
+    }
+
+    if (successModal) {
+      successModal.classList.remove('hidden');
+    }
+  }
+
+  function downloadJsonFile(data, clientName) {
+    const filename = `נתונים פיננסים ${clientName}.json`;
     const jsonString = JSON.stringify(data, null, 2);
-
     try {
       const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
@@ -1438,59 +1907,326 @@ document.addEventListener('DOMContentLoaded', () => {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      showNotification('קובץ הגיבוי הורד למחשבכם בהצלחה.', 'success');
     } catch (err) {
-      console.error('Error generating automatic download:', err);
+      console.error('Error downloading JSON:', err);
     }
+  }
 
-    localStorage.removeItem('financial_questionnaire_draft');
-    draftStatusText.textContent = 'השאלון הושלם והורד בהצלחה!';
+  function generateAndPrintPdfSummary(data, clientName) {
+    const p1 = data.partner1 || {};
+    const p2 = data.partner2 || {};
+    const family = data.family || {};
+    const fillDate = data.general?.fill_date || new Date().toLocaleDateString('he-IL');
 
-    const modalHeaderH2 = successModal.querySelector('.modal-header h2');
-    const modalHeaderP = successModal.querySelector('.modal-header p');
-    const modalBody = successModal.querySelector('.modal-body');
+    // Compute live metrics for report
+    const inc1 = (parseFloat(data.income1?.employee_income) || 0) + (parseFloat(data.income1?.self_employed_income) || 0) + ((parseFloat(data.income1?.bonuses) || 0) / 12);
+    const inc2 = (parseFloat(data.income2?.employee_income) || 0) + (parseFloat(data.income2?.self_employed_income) || 0) + ((parseFloat(data.income2?.bonuses) || 0) / 12);
     
-    if (modalHeaderH2) {
-      modalHeaderH2.textContent = 'השאלון נשמר בהצלחה והורד למחשבכם!';
+    let otherInc = 0;
+    if (Array.isArray(data.other_income)) {
+      data.other_income.forEach(row => otherInc += (parseFloat(row.amount) || 0));
     }
-    if (modalHeaderP) {
-      modalHeaderP.innerHTML = `
-        אנא שלחו כעת את הקובץ <strong>'${filename}'</strong> שירד אליכם ישירות לוואטסאפ של היועץ הפיננסי שלכם:<br><br>
-        <div class="wa-buttons-container">
-          <a href="https://wa.me/972584442400" target="_blank" class="btn-wa">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.42 9.863-9.864.001-2.63-1.023-5.101-2.884-6.963C16.59 1.96 14.118.937 11.487.937 6.05 1.937 1.628 6.042 1.626 11.486c-.001 1.683.447 3.323 1.3 4.773L1.935 21.8l5.712-1.498zm11.783-6.883c-.302-.15-.1.087-.69-.377-.12-.09-.242-.18-.363-.27-.24-.18-.46-.225-.66-.03-.2.195-.78.78-.96.975-.18.195-.36.225-.66.075-.3-.15-1.265-.465-2.41-1.485-.89-.795-1.49-1.785-1.665-2.085-.175-.3-.02-.465.13-.615.135-.135.3-.35.45-.525.15-.175.2-.3.3-.5.1-.2.05-.375-.025-.525-.075-.15-.675-1.625-.925-2.225-.244-.589-.5-.589-.69-.597-.18-.008-.39-.01-.6-.01-.21 0-.555.08-.846.4-.29.32-1.11 1.08-1.11 2.63s1.13 3.05 1.285 3.26c.155.21 2.22 3.39 5.375 4.75.75.32 1.33.51 1.79.66.756.24 1.444.205 1.988.124.607-.09 1.847-.755 2.11-1.485.262-.73.262-1.355.184-1.485-.078-.13-.284-.21-.586-.36z"/></svg>
-            שליחה לוואטסאפ: 058-4442400
-          </a>
-          <a href="https://wa.me/972503333164" target="_blank" class="btn-wa">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.42 9.863-9.864.001-2.63-1.023-5.101-2.884-6.963C16.59 1.96 14.118.937 11.487.937 6.05 1.937 1.628 6.042 1.626 11.486c-.001 1.683.447 3.323 1.3 4.773L1.935 21.8l5.712-1.498zm11.783-6.883c-.302-.15-.1.087-.69-.377-.12-.09-.242-.18-.363-.27-.24-.18-.46-.225-.66-.03-.2.195-.78.78-.96.975-.18.195-.36.225-.66.075-.3-.15-1.265-.465-2.41-1.485-.89-.795-1.49-1.785-1.665-2.085-.175-.3-.02-.465.13-.615.135-.135.3-.35.45-.525.15-.175.2-.3.3-.5.1-.2.05-.375-.025-.525-.075-.15-.675-1.625-.925-2.225-.244-.589-.5-.589-.69-.597-.18-.008-.39-.01-.6-.01-.21 0-.555.08-.846.4-.29.32-1.11 1.08-1.11 2.63s1.13 3.05 1.285 3.26c.155.21 2.22 3.39 5.375 4.75.75.32 1.33.51 1.79.66.756.24 1.444.205 1.988.124.607-.09 1.847-.755 2.11-1.485.262-.73.262-1.355.184-1.485-.078-.13-.284-.21-.586-.36z"/></svg>
-            שליחה לוואטסאפ: 050-3333164
-          </a>
+    const totalIncome = inc1 + inc2 + otherInc;
+
+    let totalExpenses = 0;
+    if (Array.isArray(data.expenses)) {
+      data.expenses.forEach(row => totalExpenses += (parseFloat(row.amount) || 0));
+    }
+    const freeCashflow = totalIncome - totalExpenses;
+
+    let totalAssets = 0;
+    let totalLiabilities = 0;
+
+    if (Array.isArray(data.real_estate)) {
+      data.real_estate.forEach(r => {
+        totalAssets += (parseFloat(r.current_value) || 0);
+        totalLiabilities += (parseFloat(r.mortgage_balance) || 0);
+      });
+    }
+    if (Array.isArray(data.mortgages)) {
+      data.mortgages.forEach(m => totalLiabilities += (parseFloat(m.current_balance) || 0));
+    }
+    if (Array.isArray(data.vehicles)) {
+      data.vehicles.forEach(v => totalAssets += (parseFloat(v.estimated_value) || 0));
+    }
+    if (Array.isArray(data.bank_accounts)) {
+      data.bank_accounts.forEach(b => {
+        const bal = parseFloat(b.current_balance) || 0;
+        if (bal >= 0) totalAssets += bal;
+        else totalLiabilities += Math.abs(bal);
+      });
+    }
+    if (Array.isArray(data.financial_assets)) {
+      data.financial_assets.forEach(a => totalAssets += (parseFloat(a.balance) || 0));
+    }
+    if (Array.isArray(data.liabilities)) {
+      data.liabilities.forEach(l => totalLiabilities += (parseFloat(l.current_balance) || 0));
+    }
+    const netWorth = totalAssets - totalLiabilities;
+
+    const printWindow = window.open('', '_blank', 'width=950,height=850');
+    if (!printWindow) {
+      alert('אנא אפשר חלונות קופצים (Popups) כדי לצפות ולהדפיס את דוח הסיכום.');
+      return;
+    }
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="he">
+      <head>
+        <meta charset="utf-8">
+        <title>סיכום נתונים פיננסיים - ${clientName}</title>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap');
+          @page { size: A4 portrait; margin: 12mm 15mm; }
+          * { box-sizing: border-box; }
+          body {
+            font-family: 'Rubik', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            direction: rtl;
+            text-align: right;
+            color: #0f172a;
+            line-height: 1.5;
+            padding: 24px;
+            background: #ffffff;
+            margin: 0 auto;
+            max-width: 900px;
+          }
+          .no-print-bar {
+            background: #ecfdf5;
+            border: 1.5px solid #10b981;
+            padding: 14px 20px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+          }
+          .btn-print-action {
+            background: #059669;
+            color: #ffffff;
+            border: none;
+            padding: 10px 24px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            border-radius: 6px;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(5, 150, 105, 0.3);
+          }
+          .btn-print-action:hover {
+            background: #047857;
+          }
+          .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 3px solid #059669;
+            padding-bottom: 14px;
+            margin-bottom: 22px;
+          }
+          .report-title h1 {
+            font-size: 1.55rem;
+            color: #064e3b;
+            margin: 0 0 6px 0;
+            font-weight: 700;
+          }
+          .report-title p {
+            margin: 0;
+            color: #64748b;
+            font-size: 0.92rem;
+          }
+          .report-badge {
+            background: #f1f5f9;
+            color: #0f172a;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            border: 1px solid #cbd5e1;
+          }
+          .card-box {
+            background: #ffffff;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 18px;
+            page-break-inside: avoid;
+          }
+          .card-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #064e3b;
+            border-bottom: 1.5px dashed #e2e8f0;
+            padding-bottom: 6px;
+            margin-bottom: 14px;
+          }
+          .metrics-grid {
+            display: flex;
+            gap: 14px;
+            margin-bottom: 10px;
+          }
+          .metric-cell {
+            flex: 1;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 12px;
+            text-align: center;
+          }
+          .metric-label {
+            font-size: 0.8rem;
+            color: #64748b;
+            font-weight: 600;
+            display: block;
+            margin-bottom: 4px;
+          }
+          .metric-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+          }
+          .text-green { color: #059669; }
+          .text-red { color: #dc2626; }
+          .text-blue { color: #2563eb; }
+          .info-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+          }
+          .info-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #f1f5f9;
+          }
+          .info-table td.label {
+            width: 32%;
+            color: #64748b;
+            font-weight: 600;
+          }
+          .report-footer {
+            margin-top: 30px;
+            padding-top: 14px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 0.8rem;
+            color: #94a3b8;
+            text-align: center;
+          }
+          @media print {
+            .no-print-bar { display: none !important; }
+            body { padding: 0; max-width: 100%; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="no-print-bar">
+          <div>
+            <strong style="font-size: 1rem; color: #064e3b;">דוח סיכום נתונים אישי לשמירה</strong>
+            <div style="font-size: 0.85rem; color: #047857;">לחצו על הכפתור כדי לשמור כקובץ PDF או להדפיס למחשב</div>
+          </div>
+          <button type="button" class="btn-print-action" onclick="window.print()">שמור כ-PDF / הדפס</button>
         </div>
-        <br>
-        או שלחו אותו כקובץ מצורף למייל של היועץ שלכם.
-      `;
-      modalHeaderP.style.fontSize = '1.1rem';
-      modalHeaderP.style.color = 'var(--color-primary-dark)';
-    }
 
-    if (modalBody) {
-      modalBody.classList.add('hidden');
-    }
+        <div class="report-header">
+          <div class="report-title">
+            <h1>סיכום שאלון נתונים לייעוץ פיננסי</h1>
+            <p>לקוח/ה: <strong>${clientName}</strong> | תאריך מילוי: ${fillDate}</p>
+          </div>
+          <span class="report-badge">עותק סיכום אישי</span>
+        </div>
 
-    downloadJsonBtn.textContent = 'הורד שוב קובץ JSON';
-    downloadJsonBtn.onclick = () => {
-      const reBlob = new Blob([jsonString], { type: 'application/json;charset=utf-8;' });
-      const reUrl = URL.createObjectURL(reBlob);
-      const reA = document.createElement('a');
-      reA.href = reUrl;
-      reA.download = filename;
-      document.body.appendChild(reA);
-      reA.click();
-      document.body.removeChild(reA);
-      URL.revokeObjectURL(reUrl);
-    };
+        <!-- Personal Info -->
+        <div class="card-box">
+          <div class="card-title">פרטים אישיים ומצב משפחתי</div>
+          <table class="info-table">
+            <tr>
+              <td class="label">בן/בת זוג 1:</td>
+              <td><strong>${p1.first_name || ''} ${p1.last_name || ''}</strong> ${p1.phone ? `(${p1.phone})` : ''} ${p1.email ? `| ${p1.email}` : ''}</td>
+            </tr>
+            ${p2.first_name ? `
+            <tr>
+              <td class="label">בן/בת זוג 2:</td>
+              <td><strong>${p2.first_name || ''} ${p2.last_name || ''}</strong> ${p2.phone ? `(${p2.phone})` : ''}</td>
+            </tr>
+            ` : ''}
+            <tr>
+              <td class="label">מצב משפחתי:</td>
+              <td>${family.marital_status || 'נשואים'} ${family.marriage_duration ? `(משך: ${family.marriage_duration} שנים)` : ''}</td>
+            </tr>
+            <tr>
+              <td class="label">ילדים:</td>
+              <td>${Array.isArray(data.children) ? `${data.children.length} ילדים` : 'ללא ילדים'}</td>
+            </tr>
+          </table>
+        </div>
 
-    // Show Success Modal
-    successModal.classList.remove('hidden');
+        <!-- Cashflow Snapshot -->
+        <div class="card-box">
+          <div class="card-title">תמונת מצב תזרימית חודשית (ממוצע)</div>
+          <div class="metrics-grid">
+            <div class="metric-cell">
+              <span class="metric-label">סך הכנסות חודשיות</span>
+              <span class="metric-value text-green">${totalIncome.toLocaleString('he-IL')} ₪</span>
+            </div>
+            <div class="metric-cell">
+              <span class="metric-label">סך הוצאות ממוצעות</span>
+              <span class="metric-value text-red">${totalExpenses.toLocaleString('he-IL')} ₪</span>
+            </div>
+            <div class="metric-cell">
+              <span class="metric-label">תזרים פנוי חודשי משוער</span>
+              <span class="metric-value ${freeCashflow >= 0 ? 'text-green' : 'text-red'}">${freeCashflow.toLocaleString('he-IL')} ₪</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Balance Sheet Snapshot -->
+        <div class="card-box">
+          <div class="card-title">תמונת מצב מאזן הון ושיווי נקי מוערך</div>
+          <div class="metrics-grid">
+            <div class="metric-cell">
+              <span class="metric-label">סך שווי נכסים וחסכונות</span>
+              <span class="metric-value text-blue">${totalAssets.toLocaleString('he-IL')} ₪</span>
+            </div>
+            <div class="metric-cell">
+              <span class="metric-label">סך התחייבויות ומשכנתאות</span>
+              <span class="metric-value text-red">${totalLiabilities.toLocaleString('he-IL')} ₪</span>
+            </div>
+            <div class="metric-cell">
+              <span class="metric-label">שווי נקי מוערך</span>
+              <span class="metric-value text-green">${netWorth.toLocaleString('he-IL')} ₪</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Goals & Expectations -->
+        <div class="card-box">
+          <div class="card-title">יעדים וציפיות מתהליך הייעוץ</div>
+          <table class="info-table">
+            <tr>
+              <td class="label">קרן חירום:</td>
+              <td>${data.goals?.has_emergency_fund === 'yes' ? `קיימת (${(parseFloat(data.goals?.emergency_fund_amount) || 0).toLocaleString('he-IL')} ₪)` : 'טרם הוגדרה'}</td>
+            </tr>
+            ${data.goals?.expectations ? `
+            <tr>
+              <td class="label">ציפיות מהייעוץ:</td>
+              <td>${data.goals.expectations}</td>
+            </tr>
+            ` : ''}
+          </table>
+        </div>
+
+        <div class="report-footer">
+          הדוח הופק באופן מאובטח מאתר השאלון הפיננסי לצורך הכנת תוכנית ייעוץ כלכלי. כל הנתונים חסויים ומוגנים.
+        </div>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+    }, 450);
   }
 
   function showNotification(msg, type) {
@@ -1578,12 +2314,90 @@ document.addEventListener('DOMContentLoaded', () => {
   // Check conditional visibility on load
   toggleConditionalFields();
   updateComputedExpensesTotal();
+  updateLiveFinancialKPIs();
 
   // Validate all steps to color indicators on start
   validateAllStepsDots();
+
+  // Initialize Floating Action Bar
+  floatingBackBtn?.addEventListener('click', () => backBtn.click());
+  floatingNextBtn?.addEventListener('click', () => nextBtn.click());
+  if (floatingStepBadge) floatingStepBadge.textContent = `שלב ${currentStep} מתוך ${TOTAL_STEPS}`;
+  if (floatingStepName) floatingStepName.textContent = STEP_TITLES[currentStep] || '';
+
+  // Initialize Sticky Step Sidebar
+  renderSidebarNav(currentStep);
+
+  sidebarScrollTopBtn?.addEventListener('click', () => {
+    const activeStepEl = document.getElementById(`step${currentStep}`);
+    if (activeStepEl) {
+      activeStepEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  });
+
+  window.addEventListener('scroll', () => {
+    if (!sidebarProgressBar) return;
+    const activeStepEl = document.getElementById(`step${currentStep}`);
+    if (!activeStepEl) return;
+    
+    const rect = activeStepEl.getBoundingClientRect();
+    const totalHeight = activeStepEl.offsetHeight - window.innerHeight;
+    if (totalHeight > 0) {
+      const scrolled = -rect.top;
+      const progress = Math.max(0, Math.min(100, (scrolled / totalHeight) * 100));
+      sidebarProgressBar.style.width = `${progress}%`;
+    }
+  }, { passive: true });
+
+  // Setup Document Prep Checklist Toggle
+  prepChecklistToggle?.addEventListener('click', () => {
+    prepChecklistCard?.classList.toggle('collapsed');
+  });
+
+  // Setup Expenses Search and Category Filter Tabs
+  if (expenseSearchInput) {
+    expenseSearchInput.addEventListener('input', filterExpenses);
+  }
+  if (clearExpenseSearch) {
+    clearExpenseSearch.addEventListener('click', () => {
+      expenseSearchInput.value = '';
+      filterExpenses();
+      expenseSearchInput.focus();
+    });
+  }
+  if (expenseCategoryTabs) {
+    expenseCategoryTabs.querySelectorAll('.cat-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        expenseCategoryTabs.querySelectorAll('.cat-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        filterExpenses();
+      });
+    });
+  }
+
+  // Setup Mobile Recommendation Smart Modal
+  if (window.innerWidth <= 768 && !sessionStorage.getItem('mobile_rec_dismissed')) {
+    if (mobileRecModal) {
+      mobileRecModal.classList.remove('hidden');
+    }
+  }
+
+  continueOnMobileBtn?.addEventListener('click', () => {
+    if (mobileRecModal) mobileRecModal.classList.add('hidden');
+    sessionStorage.setItem('mobile_rec_dismissed', 'true');
+  });
+
+  if (sendSelfWhatsappBtn) {
+    const pageUrl = window.location.href;
+    const msg = encodeURIComponent(`היי, הנה קישור לשאלון הייעוץ הפיננסי כדי לפתוח ולמלא אותו בנוחות מהמחשב:\n${pageUrl}`);
+    sendSelfWhatsappBtn.href = `https://wa.me/?text=${msg}`;
+  }
 
   // Perform initial resize of all textareas to fit loaded values
   setTimeout(() => {
     if (window.resizeAllTextareas) window.resizeAllTextareas();
   }, 100);
 });
+
