@@ -2288,3 +2288,168 @@ fieldset,
 
 
 
+
+/* ==========================================================================
+   Additions: household type, "pick or write" cells, consent, errors, phones
+   ========================================================================== */
+
+/* Links inside text (pension clearing house, privacy policy) */
+.checklist-item a,
+.info-box a,
+.consent-row a,
+.draft-privacy-note a,
+.policy a {
+  color: var(--color-primary);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.checklist-item a:hover,
+.info-box a:hover,
+.consent-row a:hover,
+.draft-privacy-note a:hover { color: var(--color-primary-dark); }
+
+.draft-privacy-note { color: var(--color-text-muted); }
+
+/* Household type */
+.household-fieldset .form-group { max-width: 460px; }
+
+/* "Pick from a list, or write your own" */
+.combo-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 130px;
+}
+.combo-cell .combo-input { margin-top: 0; }
+.combo-cell:has(> .combo-input[style*="var(--color-error)"]) .combo-select {
+  border-color: var(--color-error);
+  background-color: var(--color-error-bg);
+}
+
+/* Suspicious / impossible values (never blocks the client) */
+tr.row-warning td { background-color: var(--color-warning-bg) !important; }
+tr.row-warning { outline: 1.5px solid var(--color-warning); outline-offset: -1px; }
+
+/* Consent */
+.consent-fieldset { background: var(--color-primary-soft); border-color: rgba(5, 150, 105, 0.3); }
+.consent-row { display: flex; align-items: flex-start; gap: 12px; padding: 6px 0; }
+.consent-row input[type="checkbox"] { width: 22px; height: 22px; flex: 0 0 22px; margin-top: 3px; accent-color: var(--color-primary); }
+.consent-row label { line-height: 1.7; cursor: pointer; }
+.consent-row.has-error { padding: 10px; border-radius: var(--radius-sm); background: var(--color-error-bg); outline: 1.5px solid var(--color-error); }
+.consent-row .error-message { flex-basis: 100%; }
+.consent-note { margin-top: 8px; font-size: 0.85rem; color: var(--color-text-muted); }
+.turnstile-container { margin-top: 14px; }
+
+/* Honeypot: hidden from people, visible to simple bots */
+.hp-field { position: absolute !important; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); pointer-events: none; white-space: nowrap; }
+
+/* Submission failed */
+.submit-error-header { padding-bottom: 8px; }
+.error-icon-wrapper {
+  width: 56px; height: 56px; margin: 0 auto 12px; border-radius: 50%;
+  background: var(--color-error-bg); color: var(--color-error);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.9rem; font-weight: 700; border: 2px solid rgba(239, 68, 68, 0.35);
+}
+.submit-error-content { max-width: 520px; }
+.submit-error-content .btn-primary,
+.submit-error-content .btn-secondary { width: 100%; justify-content: center; text-decoration: none; padding: 12px 18px; }
+.submit-error-detail { font-size: 0.8rem; color: var(--color-text-muted); }
+
+/* Phone-recommendation modal */
+.mobile-rec-sub { margin-top: -4px; font-size: 0.9rem; }
+.mobile-rec-secondary-actions { display: flex; gap: 10px; width: 100%; }
+.mobile-rec-mini { flex: 1; justify-content: center; text-decoration: none; padding: 9px 10px; }
+
+/* ==========================================================================
+   Phones: every table row becomes a card, one field per line
+   ========================================================================== */
+@media (max-width: 768px) {
+  body { font-size: 16px; }
+
+  /* Inputs at 16px prevent the automatic zoom on iPhones */
+  input, select, textarea,
+  .dynamic-table td input, .dynamic-table td select, .dynamic-table td textarea {
+    font-size: 16px;
+    min-height: 44px;
+  }
+
+  .responsive-table-wrapper {
+    overflow: visible;
+    border: 0;
+    box-shadow: none;
+    background: none;
+    background-image: none;
+  }
+  .dynamic-table { min-width: 0; }
+  .dynamic-table thead { display: none; }
+  .dynamic-table, .dynamic-table tbody { display: block; width: 100%; }
+  .dynamic-table tbody tr {
+    display: block;
+    background: #fff;
+    border: 1.5px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 8px 14px 12px;
+    margin-bottom: 12px;
+    box-shadow: var(--shadow-sm);
+  }
+  .dynamic-table td {
+    display: block;
+    padding: 6px 0;
+    border: 0;
+    width: 100%;
+  }
+  .dynamic-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 3px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+  }
+  .dynamic-table td.col-actions { width: 100%; text-align: left; padding-top: 2px; }
+  .dynamic-table td.col-actions .btn-delete { margin-right: auto; }
+
+  /* Expenses: compact card - name on top, three months side by side */
+  #expensesTable tbody tr {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px 8px;
+    padding: 8px 12px;
+  }
+  #expensesTable tbody td { grid-column: 1 / -1; padding: 2px 0; }
+  #expensesTable tbody td:nth-child(2),
+  #expensesTable tbody td:nth-child(3),
+  #expensesTable tbody td:nth-child(4) { grid-column: auto; }
+  #expensesTable tbody td:nth-child(1)::before { display: none; }
+  #expensesTable tbody td:nth-child(1) textarea { font-weight: 600; }
+
+  /* Fewer controls, bigger buttons */
+  #uploadJsonBtn, #downloadDraftBtn,
+  .draft-actions .divider { display: none !important; }
+  .form-footer { display: none; }
+  .floating-save-status, .floating-step-info { display: none; }
+  .floating-action-bar { padding: 10px 12px; }
+  .floating-bar-content { gap: 10px; }
+  .floating-nav-buttons { flex: 1; }
+  .floating-nav-buttons .btn-nav { flex: 1; padding: 13px 10px; font-size: 1rem; }
+  .step-sidebar { display: none !important; }
+  body { padding-bottom: 90px; }
+  .kpi-metric-divider { display: none; }
+}
+
+/* Never let a wide child stretch the page sideways */
+.form-main-content { min-width: 0; flex: 1 1 0; }
+@media (max-width: 768px) {
+  .form-layout-wrapper { display: block; }
+  .kpi-metrics-grid { flex-direction: column; align-items: stretch; }
+}
+
+/* Long <option> texts must not widen a fieldset (default min-width is min-content) */
+fieldset { min-width: 0; }
+select { max-width: 100%; text-overflow: ellipsis; }
+.form-group { min-width: 0; }
+@media (max-width: 600px) {
+  .form-grid { grid-template-columns: minmax(0, 1fr); }
+}

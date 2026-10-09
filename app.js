@@ -32,9 +32,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const hasEmergencyFundSelect = document.getElementById('has_emergency_fund');
   const emergencyFundAmountContainer = document.getElementById('emergency_fund_amount_container');
   
-  // Webhook Integration Configuration
-  const N8N_WEBHOOK_URL = 'https://n8n.invite2you.com/webhook/financial-survey';
-
   // Modal Elements
   const successModal = document.getElementById('successModal');
   const closeModalBtn = document.getElementById('closeModalBtn');
@@ -131,6 +128,537 @@ document.addEventListener('DOMContentLoaded', () => {
     ]
   };
 
+  // --- CONFIG / SMALL HELPERS ---
+  const CFG = window.APP_CONFIG || {};
+  const N8N_WEBHOOK_URL = CFG.WEBHOOK_URL;
+  const pageLoadedAt = Date.now();
+  const urlParams = new URLSearchParams(window.location.search);
+  let loadedFromFile = false;
+  let isSubmitting = false;
+  let lastPayload = null;
+
+  const STORAGE_KEYS = {
+    draft: 'financial_questionnaire_draft',
+    step: 'financial_questionnaire_step',
+    visited: 'financial_questionnaire_visited_steps',
+    savedAt: 'financial_questionnaire_saved_at',
+    submissionId: 'financial_questionnaire_submission_id',
+    lastSubmitAt: 'financial_questionnaire_last_submit_at',
+    advisor: 'financial_questionnaire_advisor'
+  };
+
+  function escapeHtml(value) {
+    return String(value === undefined || value === null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function newRowId(prefix) {
+    return `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-3)}`;
+  }
+
+  // Number or null. An empty field is NOT the same as "0" (the advisor needs to know the difference).
+  function nz(value) {
+    if (value === '' || value === null || value === undefined) return null;
+    const clean = String(value).replace(/,/g, '').trim();
+    if (clean === '') return null;
+    const n = parseFloat(clean);
+    return isNaN(n) ? null : n;
+  }
+
+  // Recursively trims strings and turns empty strings into null (cleaner data for the receiving side).
+  function cleanEmpty(value) {
+    if (typeof value === 'string') {
+      const t = value.trim();
+      return t === '' ? null : t;
+    }
+    if (Array.isArray(value)) return value.map(cleanEmpty);
+    if (value && typeof value === 'object') {
+      const out = {};
+      Object.keys(value).forEach(k => { out[k] = cleanEmpty(value[k]); });
+      return out;
+    }
+    return value;
+  }
+
+  function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+  function getStored(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+  }
+  function setStored(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) { /* storage may be blocked */ }
+  }
+  function removeStored(key) {
+    try { localStorage.removeItem(key); } catch (e) { /* ignore */ }
+  }
+  function clearAllStoredData() {
+    [STORAGE_KEYS.draft, STORAGE_KEYS.step, STORAGE_KEYS.visited, STORAGE_KEYS.savedAt, STORAGE_KEYS.submissionId]
+      .forEach(removeStored);
+  }
+
+  // One id per questionnaire. It survives retries, so the receiving side can ignore duplicates.
+  function getSubmissionId() {
+    let id = getStored(STORAGE_KEYS.submissionId);
+    if (!id) {
+      id = (window.crypto && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : 'sub_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+      setStored(STORAGE_KEYS.submissionId, id);
+    }
+    return id;
+  }
+
+  // Advisor / campaign that sent the link (?advisor=eitan&utm_source=...), remembered for the session.
+  const urlAdvisor = urlParams.get('advisor') || urlParams.get('ref');
+  if (urlAdvisor) setStored(STORAGE_KEYS.advisor, urlAdvisor);
+  const trackedAdvisor = urlAdvisor || getStored(STORAGE_KEYS.advisor) || null;
+
+  // --- HOUSEHOLD (single / couple) ---
+  const householdTypeSelect = document.getElementById('household_type');
+
+  function hasPartner() {
+    return !householdTypeSelect || householdTypeSelect.value !== 'single';
+  }
+
+  function typedName(n) {
+    return (document.getElementById(`p${n}_first_name`)?.value || '').trim();
+  }
+
+  function personName(n) {
+    const first = typedName(n);
+    if (first) return first;
+    if (n === 1) return hasPartner() ? 'בן/בת זוג 1' : 'אני';
+    return 'בן/בת זוג 2';
+  }
+
+  function personItems(opts) {
+    const items = [{ key: 'p1', label: personName(1) }];
+    if (hasPartner()) {
+      items.push({ key: 'p2', label: personName(2) });
+      if (opts && opts.joint) items.push({ key: 'joint', label: 'משותף' });
+    }
+    return items;
+  }
+
+  const PARTNER_LABEL_TARGETS = [
+    { sel: '#partner1_fieldset legend', n: 1, single: 'הפרטים האישיים שלכם' },
+    { sel: '#partner2_fieldset legend', n: 2 },
+    { sel: '#p1_income_fieldset legend', n: 1, single: 'הכנסות ותעסוקה' },
+    { sel: '#p2_income_fieldset legend', n: 2 },
+    { sel: 'label[for="p1_income_notes"]', n: 1, single: 'הערות על ההכנסות' },
+    { sel: 'label[for="p2_income_notes"]', n: 2 }
+  ];
+
+  // Replaces "בן/בת זוג 1/2" in titles with the real first names once they are typed.
+  function updatePartnerLabels() {
+    PARTNER_LABEL_TARGETS.forEach(({ sel, n, single }) => {
+      const el = document.querySelector(sel);
+      if (!el) return;
+      if (!el.dataset.orig) el.dataset.orig = el.textContent;
+      let text = el.dataset.orig;
+      if (!hasPartner() && single) {
+        text = single;
+      } else if (typedName(n)) {
+        text = text.replace(`בן/בת זוג ${n}`, typedName(n));
+      }
+      el.textContent = text;
+    });
+  }
+
+  // --- COMBO CELLS: choose from a list, or choose "other" and write your own ---
+  const OTHER_KEY = '__other';
+  const lst = (...labels) => labels.map(label => ({ key: label, label }));
+  const BANKS = ['בנק לאומי', 'בנק הפועלים', 'בנק דיסקונט', 'בנק מזרחי-טפחות', 'הבנק הבינלאומי', 'מרכנתיל דיסקונט', 'בנק יהב', 'בנק ירושלים'];
+
+  const COMBO_LISTS = {
+    person_all: { people: true, other: false, items: () => personItems({ joint: true }) },
+    person_owner: { people: true, items: () => personItems({ joint: true }) },
+    person_pair: { people: true, other: false, items: () => personItems({ joint: false }) },
+    insured: {
+      people: true,
+      items: () => personItems({ joint: false }).concat([{ key: 'family', label: 'כל המשפחה' }, { key: 'children', label: 'הילדים' }])
+    },
+    relation: { items: () => lst('אבא', 'אמא', 'אח/אחות', 'סבא/סבתא', 'חם/חמות', 'ילד/ה בוגר/ת', 'קרוב משפחה אחר') },
+    income_source: { items: () => lst('קצבת ילדים', 'שכירות מנכס', 'תמיכה משפחתית קבועה', 'קצבת ביטוח לאומי', 'מזונות', 'ריבית / דיבידנדים', 'עבודה נוספת') },
+    bank: { items: () => lst(...BANKS) },
+    mortgage_track: {
+      items: () => lst('פריים', 'קבועה צמודה', 'קבועה לא צמודה (קל"צ)', 'משתנה כל 5 שנים צמודה', 'משתנה כל 5 שנים לא צמודה', 'משתנה כל שנה / שנתיים', 'מט"ח', 'זכאות (משרד הבינוי והשיכון)')
+    },
+    lender: { items: () => lst(...BANKS, 'חברת כרטיס אשראי', 'חברת מימון חוץ-בנקאית', 'משפחה / חברים') },
+    loan_purpose: { items: () => lst('רכב', 'שיפוץ / שדרוג הבית', 'לימודים', 'איחוד הלוואות', 'חופשה / אירוע', 'עסק', 'מימון צריכה כללי', 'אוברדראפט', 'הלוואה מחברים / משפחה') },
+    insurance_company: { items: () => lst('מגדל', 'הראל', 'כלל', 'מנורה מבטחים', 'הפניקס', 'איילון', 'הכשרה', 'שירביט', 'ביטוח ישיר', 'AIG') },
+    pension_company: { items: () => lst('מגדל', 'הראל', 'כלל', 'מנורה מבטחים', 'הפניקס', 'מיטב', 'אלטשולר שחם', 'אנליסט', 'מור', 'ילין לפידות', 'אינפיניטי') },
+    capital_source: { items: () => lst('קרן השתלמות', 'קופת גמל להשקעה', 'ירושה', 'פיצויי פיטורין', 'מכירת נכס', 'מענק / בונוס חד-פעמי', 'פיצוי / תביעה') },
+    capital_when: {
+      otherLabel: 'אחר (תאריך מדויק)…',
+      items: () => lst('השנה', 'בעוד 1–2 שנים', 'בעוד 3–5 שנים', 'בעוד 6–10 שנים', 'בעוד יותר מ-10 שנים')
+    },
+    recurring_goal: { items: () => lst('שדרוג רכב', 'חופשה שנתית משפחתית', 'שיפוץ תקופתי', 'החלפת ציוד ביתי', 'אירועים משפחתיים') },
+    onetime_goal: { items: () => lst('קניית דירה', 'שיפוץ גדול', 'לימודים אקדמיים', 'פרישה מוקדמת', 'פתיחת עסק', 'החלפת רכב', 'חתונה / אירוע גדול') },
+    bank_usage: { items: () => lst('עו"ש משפחתי ראשי', 'חשבון שכר', 'חיסכון / רזרבה', 'הוצאות שוטפות', 'חשבון עסקי', 'חשבון ילדים') },
+    card_issuer: { items: () => lst('ויזה כאל', 'ישראכרט', 'מקס', 'אמריקן אקספרס', 'דיינרס', 'כרטיס מהבנק (ויזה / מסטרקארד)') },
+    card_usage: { items: () => lst('קניות סופר ודלק', 'הוצאות שוטפות כלליות', 'חופשות ואירועים', 'עסקי', 'כרטיס גיבוי') }
+  };
+
+  const LEGACY_PERSON_VALUES = { 'בן זוג 1': 'p1', 'בן זוג 2': 'p2', 'משותף': 'joint' };
+
+  function comboOptions(listKey) {
+    const def = COMBO_LISTS[listKey];
+    let html = '<option value="" disabled selected>בחרו…</option>';
+    def.items().forEach(item => {
+      html += `<option value="${escapeHtml(item.key)}">${escapeHtml(item.label)}</option>`;
+    });
+    if (def.other !== false) {
+      html += `<option value="${OTHER_KEY}">${escapeHtml(def.otherLabel || 'אחר – לכתוב בעצמי…')}</option>`;
+    }
+    return html;
+  }
+
+  function comboCell(inputClass, listKey, placeholder, required) {
+    const def = COMBO_LISTS[listKey];
+    return `<div class="combo-cell" data-list="${listKey}"${def.people ? ' data-people="1"' : ''}>
+        <select class="combo-select" aria-label="${escapeHtml(placeholder)}">${comboOptions(listKey)}</select>
+        <input type="text" class="${inputClass} combo-input hidden" placeholder="${escapeHtml(placeholder)}"${required ? ' required' : ''}>
+      </div>`;
+  }
+
+  function comboLabel(cell, key) {
+    const opt = Array.from(cell.querySelector('.combo-select').options).find(o => o.value === key);
+    return opt ? opt.textContent : key;
+  }
+
+  function applyComboSelection(cell, silent) {
+    const sel = cell.querySelector('.combo-select');
+    const inp = cell.querySelector('.combo-input');
+    const key = sel.value;
+    inp.dataset.key = key === '' ? '' : (key === OTHER_KEY ? 'other' : key);
+    if (key === OTHER_KEY) {
+      inp.classList.remove('hidden');
+      inp.value = '';
+      if (!silent) inp.focus();
+    } else {
+      inp.classList.add('hidden');
+      inp.value = key === '' ? '' : comboLabel(cell, key);
+    }
+    if (!silent) inp.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  // Puts a saved value back into a combo cell (also understands old drafts that stored plain text).
+  function restoreCombo(cell, value, savedKey) {
+    const sel = cell.querySelector('.combo-select');
+    const inp = cell.querySelector('.combo-input');
+    const hasText = value !== undefined && value !== null && String(value) !== '';
+    const options = Array.from(sel.options).filter(o => o.value && o.value !== OTHER_KEY);
+    let match = null;
+    if (savedKey && savedKey !== 'other') match = options.find(o => o.value === savedKey);
+    if (!match && hasText) {
+      const legacyKey = LEGACY_PERSON_VALUES[String(value).trim()];
+      match = options.find(o => (legacyKey && o.value === legacyKey) || o.textContent === String(value).trim());
+    }
+    if (match) {
+      sel.value = match.value;
+      applyComboSelection(cell, true);
+    } else if (hasText) {
+      sel.value = OTHER_KEY;
+      inp.classList.remove('hidden');
+      inp.value = String(value);
+      inp.dataset.key = 'other';
+    } else {
+      sel.value = '';
+      applyComboSelection(cell, true);
+    }
+  }
+
+  // If there is only one possible answer (e.g. a single person), choose it for the client.
+  function autoSelectSingleChoice(cell) {
+    const def = COMBO_LISTS[cell.dataset.list];
+    const sel = cell.querySelector('.combo-select');
+    if (sel.value !== '') return;
+    const options = Array.from(sel.options).filter(o => o.value && o.value !== OTHER_KEY);
+    // Only one possible answer -> choose it. A single person is always the owner -> choose them.
+    if ((def.other === false && options.length === 1) || (def.people && !hasPartner() && options.some(o => o.value === 'p1'))) {
+      sel.value = def.other === false && options.length === 1 ? options[0].value : 'p1';
+      applyComboSelection(cell, true);
+    }
+  }
+
+  // When names / household type change, the "person" lists are rebuilt with the current names.
+  function refreshPersonCombos() {
+    document.querySelectorAll('.combo-cell[data-people="1"]').forEach(cell => {
+      const sel = cell.querySelector('.combo-select');
+      const inp = cell.querySelector('.combo-input');
+      const current = sel.value;
+      sel.innerHTML = comboOptions(cell.dataset.list);
+      sel.value = current;
+      if (sel.value !== current) {
+        sel.value = '';
+        inp.value = '';
+        inp.dataset.key = '';
+        inp.classList.add('hidden');
+      } else if (['p1', 'p2', 'joint'].includes(current)) {
+        inp.value = comboLabel(cell, current);
+      }
+      autoSelectSingleChoice(cell);
+    });
+  }
+
+  document.addEventListener('change', (e) => {
+    const sel = e.target.closest ? e.target.closest('.combo-select') : null;
+    if (sel) applyComboSelection(sel.closest('.combo-cell'), false);
+  });
+
+  // --- REAL ESTATE <-> MORTGAGE LINK ---
+  function refreshPropertyOptions() {
+    const properties = Array.from(document.querySelectorAll('#realEstateTable tbody tr')).map((row, i) => {
+      const desc = (row.querySelector('.cell-description')?.value || '').trim();
+      return { id: row.dataset.rowId, label: desc || `נכס ${i + 1}` };
+    });
+    document.querySelectorAll('#mortgageTable .cell-property-id').forEach(sel => {
+      const wanted = sel.value || sel.dataset.pending || '';
+      let html = '<option value="">ללא שיוך / לא רלוונטי</option>';
+      properties.forEach(p => { html += `<option value="${escapeHtml(p.id)}">${escapeHtml(p.label)}</option>`; });
+      sel.innerHTML = html;
+      sel.value = properties.some(p => p.id === wanted) ? wanted : '';
+      sel.dataset.pending = '';
+    });
+  }
+
+  // Short label per column, used on phones where each table row becomes a card.
+  function labelTableCells(row) {
+    const table = row.closest('table');
+    if (!table) return;
+    const headers = Array.from(table.querySelectorAll('thead th')).map(th => {
+      const clone = th.cloneNode(true);
+      clone.querySelectorAll('.tooltip-box, .tooltip-text').forEach(n => n.remove());
+      return clone.textContent.replace(/\s+/g, ' ').replace(/\*/g, '').trim();
+    });
+    Array.from(row.children).forEach((td, i) => {
+      if (!td.classList.contains('col-actions') && headers[i]) td.setAttribute('data-label', headers[i]);
+    });
+  }
+
+  // --- EXPENSE CATEGORY IDS (stable, language-independent keys for analysis) ---
+  const EXPENSE_IDS = {
+    'משכנתא': 'mortgage', 'הלוואות': 'loans', 'ביטוח בריאות משלים': 'health_supplementary',
+    'ביטוח בריאות פרטי': 'health_private', 'ביטוח חיים': 'life_insurance', 'ביטוח דירה': 'home_insurance',
+    'הקצאה להוצאות בלת"מ': 'unexpected_reserve', 'חיסכון': 'savings', 'מזון ומכולת': 'groceries',
+    'ביגוד והנעלה': 'clothing', 'חשמל': 'electricity', 'גז': 'gas', 'ארנונה ומים': 'property_tax_water',
+    'מטפלת/שמרטף/מעון/גן': 'childcare', 'ביה"ס וחומרי לימוד': 'school', 'חוגים': 'classes',
+    'דמי כיס': 'pocket_money', 'טלפון קווי': 'landline', 'טלפון סלולרי': 'mobile', 'אינטרנט': 'internet',
+    'שכ"ד': 'rent', 'וועד בית': 'building_committee', 'עוזרת': 'cleaner', 'אחזקת בית ותיקונים': 'home_maintenance',
+    'תחבורה ציבורית': 'public_transport', 'דלק': 'fuel', 'אחזקת רכב ותיקונים': 'car_maintenance',
+    'ביטוח (חובה ומקיף)': 'car_insurance', 'טסט': 'car_test', 'עמלות וריבית': 'fees_interest',
+    'מספרה': 'hairdresser', 'קוסמטיקה': 'cosmetics', 'כבלים': 'tv_cable', 'מנויים': 'subscriptions',
+    'עיתונים': 'newspapers', 'נסיעות לחו"ל וחופשות': 'vacations', 'קאנטרי קלאב': 'gym',
+    'מסעדות סרטים והצגות': 'dining_entertainment', 'מתנות (משפחה, אירועים)': 'gifts', 'מזונות': 'alimony',
+    'תמיכה בבני המשפחה': 'family_support', 'הוצאות ריפוי': 'medical', 'סיגריות': 'cigarettes',
+    'מזומן ללא מעקב': 'untracked_cash'
+  };
+  const LEGACY_EXPENSE_LABELS = { 'משכתנתא': 'משכנתא' };
+
+  // --- TOTALS (single source of truth: live KPI cards, payload, PDF summary) ---
+  function sumCells(rowSelector, cellSelector) {
+    let total = 0;
+    document.querySelectorAll(rowSelector).forEach(r => { total += parseNumber(r.querySelector(cellSelector)?.value); });
+    return total;
+  }
+
+  function computeTotals() {
+    const partner2 = hasPartner();
+    const income = (n) => {
+      const type = document.getElementById(`p${n}_employment_type`)?.value;
+      const self = type === 'self_employed';
+      const emp = !self ? parseNumber(document.getElementById(`p${n}_employee_income`)?.value) : 0;
+      const bonus = !self ? parseNumber(document.getElementById(`p${n}_bonuses`)?.value) / 12 : 0;
+      const own = self ? parseNumber(document.getElementById(`p${n}_self_employed_income`)?.value) : 0;
+      return emp + bonus + own;
+    };
+    const p1Income = income(1);
+    const p2Income = partner2 ? income(2) : 0;
+    const additionalIncome = sumCells('#additionalIncomeTable tbody tr', '.cell-amount');
+    const monthlyIncome = p1Income + p2Income + additionalIncome;
+    const monthlyExpenses = sumCells('#expensesTable tbody tr', '.cell-average');
+
+    const realEstate = Array.from(document.querySelectorAll('#realEstateTable tbody tr')).map(r => ({
+      id: r.dataset.rowId,
+      value: parseNumber(r.querySelector('.cell-current-val')?.value),
+      remaining: parseNumber(r.querySelector('.cell-mortgage-rem')?.value)
+    }));
+    const tracks = Array.from(document.querySelectorAll('#mortgageTable tbody tr')).map(r => ({
+      property: r.querySelector('.cell-property-id')?.value || '',
+      remaining: parseNumber(r.querySelector('.cell-remaining')?.value),
+      monthly: parseNumber(r.querySelector('.cell-monthly')?.value)
+    }));
+
+    const realEstateValue = realEstate.reduce((s, p) => s + p.value, 0);
+    const vehiclesValue = sumCells('#vehiclesTable tbody tr', '.cell-value');
+    const financialAssetsValue = sumCells('#financialAssetsTable tbody tr', '.cell-amount');
+    const totalAssets = realEstateValue + vehiclesValue + financialAssetsValue;
+
+    // The mortgage may be typed in the property table AND in the tracks table: never count it twice.
+    let mortgageBalance;
+    const linkedTracks = tracks.filter(t => t.property);
+    if (linkedTracks.length) {
+      const byProperty = {};
+      linkedTracks.forEach(t => { byProperty[t.property] = (byProperty[t.property] || 0) + t.remaining; });
+      mortgageBalance = realEstate.reduce((s, p) => s + Math.max(p.remaining, byProperty[p.id] || 0), 0)
+        + tracks.filter(t => !t.property).reduce((s, t) => s + t.remaining, 0);
+    } else {
+      mortgageBalance = Math.max(
+        realEstate.reduce((s, p) => s + p.remaining, 0),
+        tracks.reduce((s, t) => s + t.remaining, 0)
+      );
+    }
+    const otherLiabilities = sumCells('#liabilitiesTable tbody tr', '.cell-current');
+    const totalLiabilities = mortgageBalance + otherLiabilities;
+
+    const mortgageMonthly = tracks.reduce((s, t) => s + t.monthly, 0);
+    const loansMonthly = sumCells('#liabilitiesTable tbody tr', '.cell-monthly');
+
+    const r = (v) => Math.round(v);
+    return {
+      monthly_income: r(monthlyIncome),
+      monthly_income_partner1: r(p1Income),
+      monthly_income_partner2: r(p2Income),
+      monthly_additional_income: r(additionalIncome),
+      monthly_expenses: r(monthlyExpenses),
+      free_cashflow: r(monthlyIncome) - r(monthlyExpenses),
+      real_estate_value: r(realEstateValue),
+      vehicles_value: r(vehiclesValue),
+      financial_assets_value: r(financialAssetsValue),
+      total_assets: r(totalAssets),
+      mortgage_balance: r(mortgageBalance),
+      other_liabilities: r(otherLiabilities),
+      total_liabilities: r(totalLiabilities),
+      net_worth: r(totalAssets) - r(totalLiabilities),
+      monthly_mortgage_payments: r(mortgageMonthly),
+      monthly_loan_payments: r(loansMonthly),
+      pension_savings_total: r(sumCells('#pensionsTable tbody tr', '.cell-balance')),
+      monthly_pension_deposits: r(sumCells('#pensionsTable tbody tr', '.cell-monthly_deposit'))
+    };
+  }
+
+  // --- DATA QUALITY: impossible / suspicious values are flagged (never blocked) ---
+  function expenseAverageById(id) {
+    const row = Array.from(document.querySelectorAll('#expensesTable tbody tr')).find(r => r.dataset.categoryId === id);
+    return row ? parseNumber(row.querySelector('.cell-average')?.value) : 0;
+  }
+
+  function setRowWarning(row, message) {
+    row.classList.add('row-warning');
+    row.title = message;
+  }
+
+  function collectQualityFlags() {
+    const flags = [];
+    const add = (code, where, detail) => flags.push({ code, where: where || null, detail: detail || null });
+    document.querySelectorAll('#questionnaireForm tr.row-warning').forEach(r => { r.classList.remove('row-warning'); r.removeAttribute('title'); });
+    const nowMonth = new Date().toISOString().slice(0, 7);
+    const t = computeTotals();
+
+    document.querySelectorAll('#mortgageTable tbody tr').forEach((row, i) => {
+      const orig = nz(row.querySelector('.cell-orig')?.value);
+      const rem = nz(row.querySelector('.cell-remaining')?.value);
+      const rate = nz(row.querySelector('.cell-rate')?.value);
+      const end = row.querySelector('.cell-end-date')?.value;
+      if (orig !== null && rem !== null && rem > orig) {
+        add('remaining_exceeds_original', `assets.mortgages[${i}]`);
+        setRowWarning(row, 'היתרה הנוכחית גבוהה מהסכום המקורי – כדאי לבדוק');
+      }
+      if (rate !== null && rate > 15) {
+        add('interest_rate_suspicious', `assets.mortgages[${i}]`, String(rate));
+        setRowWarning(row, 'אחוז הריבית נראה גבוה מאוד – כדאי לבדוק');
+      }
+      if (end && end < nowMonth && rem) add('loan_end_date_in_past', `assets.mortgages[${i}]`, end);
+    });
+
+    document.querySelectorAll('#liabilitiesTable tbody tr').forEach((row, i) => {
+      const orig = nz(row.querySelector('.cell-orig')?.value);
+      const cur = nz(row.querySelector('.cell-current')?.value);
+      const rate = nz(row.querySelector('.cell-rate')?.value);
+      const end = row.querySelector('.cell-end')?.value;
+      if (orig !== null && cur !== null && cur > orig) {
+        add('remaining_exceeds_original', `liabilities[${i}]`);
+        setRowWarning(row, 'היתרה הנוכחית גבוהה מהסכום המקורי – כדאי לבדוק');
+      }
+      if (rate !== null && rate > 40) add('interest_rate_suspicious', `liabilities[${i}]`, String(rate));
+      if (end && end < nowMonth && cur) add('loan_end_date_in_past', `liabilities[${i}]`, end);
+    });
+
+    document.querySelectorAll('#realEstateTable tbody tr').forEach((row, i) => {
+      const orig = nz(row.querySelector('.cell-mortgage-orig')?.value);
+      const rem = nz(row.querySelector('.cell-mortgage-rem')?.value);
+      const value = nz(row.querySelector('.cell-current-val')?.value);
+      if (orig !== null && rem !== null && rem > orig) {
+        add('remaining_exceeds_original', `assets.real_estate[${i}]`);
+        setRowWarning(row, 'יתרת המשכנתא גבוהה מהסכום שנלקח במקור – כדאי לבדוק');
+      }
+      if (value !== null && rem !== null && rem > value) add('negative_equity', `assets.real_estate[${i}]`);
+    });
+
+    if (!t.monthly_income) add('no_income');
+    if (!t.monthly_expenses) add('no_expenses');
+    if (t.monthly_income > 0 && t.monthly_expenses > 0 && t.monthly_expenses < t.monthly_income * 0.4) {
+      add('expenses_far_below_income', null, `${t.monthly_expenses}/${t.monthly_income}`);
+    }
+    if (t.monthly_income > 0 && t.monthly_expenses > t.monthly_income) add('negative_cashflow', null, String(t.free_cashflow));
+    if (t.monthly_mortgage_payments > 0 && expenseAverageById('mortgage') === 0) add('mortgage_payment_missing_in_expenses');
+    if (t.monthly_loan_payments > 0 && expenseAverageById('loans') === 0) add('loan_payments_missing_in_expenses');
+
+    const anyLinked = Array.from(document.querySelectorAll('#mortgageTable .cell-property-id')).some(s => s.value);
+    if (!anyLinked) {
+      const reRem = sumCells('#realEstateTable tbody tr', '.cell-mortgage-rem');
+      const trRem = sumCells('#mortgageTable tbody tr', '.cell-remaining');
+      if (reRem > 0 && trRem > 0 && Math.abs(reRem - trRem) > 0.1 * Math.max(reRem, trRem)) {
+        add('mortgage_total_mismatch', null, `${reRem} vs ${trRem}`);
+      }
+    }
+
+    const age1 = nz(document.getElementById('p1_age')?.value);
+    const duration = nz(document.getElementById('marriage_duration')?.value);
+    if (age1 !== null && duration !== null && duration > age1 - 16) add('marriage_duration_exceeds_age');
+    return flags;
+  }
+
+  let qualityTimer = null;
+  function scheduleQualityCheck() {
+    clearTimeout(qualityTimer);
+    qualityTimer = setTimeout(collectQualityFlags, 400);
+  }
+
+  // --- ANTI-SPAM: Cloudflare Turnstile (free, optional - active only when a site key is configured) ---
+  let turnstileToken = null;
+  let turnstileWidgetId = null;
+
+  function initTurnstile() {
+    const container = document.getElementById('turnstileContainer');
+    if (!CFG.TURNSTILE_SITE_KEY || !container) return;
+    container.classList.remove('hidden');
+    const render = () => {
+      if (!window.turnstile || turnstileWidgetId !== null) return;
+      turnstileWidgetId = window.turnstile.render(container, {
+        sitekey: CFG.TURNSTILE_SITE_KEY,
+        language: 'he',
+        callback: (token) => { turnstileToken = token; },
+        'expired-callback': () => { turnstileToken = null; },
+        'error-callback': () => { turnstileToken = null; }
+      });
+    };
+    const script = document.createElement('script');
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    script.async = true;
+    script.onload = render;
+    document.head.appendChild(script);
+  }
+
+  function resetTurnstile() {
+    turnstileToken = null;
+    if (window.turnstile && turnstileWidgetId !== null) window.turnstile.reset(turnstileWidgetId);
+  }
+
+  let lastHouseholdState = null;
+
   // --- DYNAMIC TABLE CELL TEMPLATES ---
   const TABLE_TEMPLATES = {
     childrenTable: () => `
@@ -151,8 +679,8 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     circleTable: () => `
-      <td><select class="cell-close-to"><option value="בן זוג 1">בן זוג 1</option><option value="בן זוג 2">בן זוג 2</option><option value="משותף">משותף</option></select></td>
-      <td><textarea class="cell-relation" rows="1" placeholder="למשל: אב, סבתא" required></textarea></td>
+      <td>${comboCell('cell-close-to', 'person_all', 'למי קרוב/ה', true)}</td>
+      <td>${comboCell('cell-relation', 'relation', 'יחס קרבה, למשל: דוד', true)}</td>
       <td><select class="cell-financial-status">${generateNumberOptions(1, 10, 5)}</select></td>
       <td><select class="cell-can-help">${generateNumberOptions(1, 10, 5)}</select></td>
       <td><select class="cell-needs-help">${generateNumberOptions(1, 10, 1)}</select></td>
@@ -165,7 +693,7 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     additionalIncomeTable: () => `
-      <td><textarea class="cell-source" rows="1" placeholder="למשל: קצבת ילדים, שכירות" required></textarea></td>
+      <td>${comboCell('cell-source', 'income_source', 'מקור ההכנסה', true)}</td>
       <td><input type="number" class="cell-amount" min="0" placeholder="0" required></td>
       <td><textarea class="cell-notes" rows="1" placeholder="זמני/קבוע, מועד סיום"></textarea></td>
       <td class="col-actions">
@@ -188,8 +716,9 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     mortgageTable: () => `
-      <td><textarea class="cell-bank" rows="1" placeholder="בנק מלווה" required></textarea></td>
-      <td><textarea class="cell-track" rows="1" placeholder="פריים, קל&quot;צ, משתנה" required></textarea></td>
+      <td><select class="cell-property-id"><option value="">ללא שיוך / לא רלוונטי</option></select></td>
+      <td>${comboCell('cell-bank', 'bank', 'שם הבנק', true)}</td>
+      <td>${comboCell('cell-track', 'mortgage_track', 'שם המסלול', true)}</td>
       <td><input type="number" class="cell-orig" min="0" placeholder="0"></td>
       <td><input type="number" class="cell-remaining" min="0" placeholder="0" required></td>
       <td><input type="number" class="cell-rate" step="0.01" min="0" placeholder="0.0" required></td>
@@ -234,8 +763,8 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     liabilitiesTable: () => `
-      <td><textarea class="cell-lender" rows="1" placeholder="הבנק / הגורם המלווה" required></textarea></td>
-      <td><textarea class="cell-purpose" rows="1" placeholder="מטרת ההלוואה" required></textarea></td>
+      <td>${comboCell('cell-lender', 'lender', 'הבנק / הגורם המלווה', true)}</td>
+      <td>${comboCell('cell-purpose', 'loan_purpose', 'מטרת ההלוואה', true)}</td>
       <td><input type="number" class="cell-orig" min="0" placeholder="0"></td>
       <td><input type="number" class="cell-current" min="0" placeholder="0" required></td>
       <td><input type="number" class="cell-monthly" min="0" placeholder="0" required></td>
@@ -255,7 +784,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <option value="פנסיה ממקור אחר">פנסיה ממקור אחר</option>
         </select>
       </td>
-      <td><textarea class="cell-recipient" rows="1" placeholder="למשל: בן זוג 1" required></textarea></td>
+      <td>${comboCell('cell-recipient', 'person_pair', 'מי מקבל/ת', true)}</td>
       <td><input type="number" class="cell-amount" min="0" placeholder="0" required></td>
       <td><textarea class="cell-notes" rows="1" placeholder="קבוע / זמני"></textarea></td>
       <td class="col-actions">
@@ -275,9 +804,10 @@ document.addEventListener('DOMContentLoaded', () => {
           <option value="מחלות קשות">מחלות קשות</option>
         </select>
       </td>
-      <td><textarea class="cell-insured" rows="1" placeholder="למשל: כולם, בת זוג 2" required></textarea></td>
-      <td><textarea class="cell-company" rows="1" placeholder="חברת ביטוח" required></textarea></td>
-      <td><textarea class="cell-premium" rows="1" placeholder="עלות / כיסוי" required></textarea></td>
+      <td>${comboCell('cell-insured', 'insured', 'של מי הביטוח', true)}</td>
+      <td>${comboCell('cell-company', 'insurance_company', 'חברת ביטוח', true)}</td>
+      <td><input type="number" class="cell-premium" min="0" placeholder="0" required></td>
+      <td><input type="number" class="cell-sum-insured" min="0" placeholder="0"></td>
       <td><textarea class="cell-agent" rows="1" placeholder="שם סוכן"></textarea></td>
       <td>
         <select class="cell-cov-type">
@@ -293,9 +823,9 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     capitalReceiptsTable: () => `
-      <td><textarea class="cell-source" rows="1" placeholder="למשל: השתלמות, ירושה" required></textarea></td>
+      <td>${comboCell('cell-source', 'capital_source', 'מקור הכספים', true)}</td>
       <td><input type="number" class="cell-amount" min="0" placeholder="0" required></td>
-      <td><textarea class="cell-when" rows="1" placeholder="למשל: 2028, עוד שנתיים" required></textarea></td>
+      <td>${comboCell('cell-when', 'capital_when', 'למשל: 2028 או עוד שנתיים', true)}</td>
       <td><textarea class="cell-notes" rows="1" placeholder="שימוש מתוכנן"></textarea></td>
       <td class="col-actions">
         <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
@@ -304,7 +834,7 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     recurringGoalsTable: () => `
-      <td><textarea class="cell-description" rows="1" placeholder="שדרוג רכב, חופשה שנתית" required></textarea></td>
+      <td>${comboCell('cell-description', 'recurring_goal', 'תיאור היעד', true)}</td>
       <td><input type="number" class="cell-freq" min="1" placeholder="למשל: 3" required></td>
       <td><input type="number" class="cell-cost" min="0" placeholder="0" required></td>
       <td><textarea class="cell-notes" rows="1" placeholder="הערות"></textarea></td>
@@ -315,7 +845,7 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     oneTimeGoalsTable: () => `
-      <td><textarea class="cell-description" rows="1" placeholder="קניית דירה, עסק, לימודים" required></textarea></td>
+      <td>${comboCell('cell-description', 'onetime_goal', 'תיאור היעד', true)}</td>
       <td><input type="number" class="cell-years" min="1" placeholder="למשל: 5" required></td>
       <td><input type="number" class="cell-cost" min="0" placeholder="0" required></td>
       <td><textarea class="cell-notes" rows="1" placeholder="הערות"></textarea></td>
@@ -338,9 +868,9 @@ document.addEventListener('DOMContentLoaded', () => {
     `,
     bankAccountsTable: () => `
       <td><textarea class="cell-name" rows="1" placeholder="למשל: לאומי סניף 800" required></textarea></td>
-      <td><textarea class="cell-owner" rows="1" placeholder="למשל: משותף / בן זוג 1" required></textarea></td>
+      <td>${comboCell('cell-owner', 'person_owner', 'בעלי החשבון', true)}</td>
       <td><input type="number" class="cell-limit" min="0" placeholder="0"></td>
-      <td><textarea class="cell-usage" rows="1" placeholder="למשל: עו&quot;ש משפחתי ראשי"></textarea></td>
+      <td>${comboCell('cell-usage', 'bank_usage', 'למה משמש החשבון')}</td>
       <td>
         <select class="cell-restricted">
           <option value="no">לא</option>
@@ -354,11 +884,11 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     creditCardsTable: () => `
-      <td><textarea class="cell-owner" rows="1" placeholder="משותף / בן זוג 1 / 2" required></textarea></td>
-      <td><textarea class="cell-name" rows="1" placeholder="למשל: ויזה כאל" required></textarea></td>
+      <td>${comboCell('cell-owner', 'person_owner', 'בעל/ת הכרטיס', true)}</td>
+      <td>${comboCell('cell-name', 'card_issuer', 'שם הכרטיס', true)}</td>
       <td><input type="text" class="cell-digits" placeholder="1234" maxlength="4" pattern="\\d{4}"></td>
       <td><input type="number" class="cell-limit" min="0" placeholder="0"></td>
-      <td><textarea class="cell-usage" rows="1" placeholder="למשל: קניות סופר/דלק"></textarea></td>
+      <td>${comboCell('cell-usage', 'card_usage', 'למה משמש הכרטיס')}</td>
       <td><textarea class="cell-notes" rows="1" placeholder="פירוט עסקאות, תשלומים וכו'"></textarea></td>
       <td class="col-actions">
         <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
@@ -367,13 +897,8 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     pensionsTable: () => `
-      <td>
-        <select class="cell-owner">
-          <option value="בן זוג 1">בן זוג 1</option>
-          <option value="בן זוג 2">בן זוג 2</option>
-        </select>
-      </td>
-      <td><textarea class="cell-company" rows="1" placeholder="למשל: אלטשולר שחם / מגדל" required></textarea></td>
+      <td>${comboCell('cell-owner', 'person_pair', 'שייך למי', true)}</td>
+      <td>${comboCell('cell-company', 'pension_company', 'קרן / חברה מנהלת', true)}</td>
       <td>
         <select class="cell-is_executive_insurance">
           <option value="no" selected>לא</option>
@@ -402,7 +927,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <td><input type="number" class="cell-month1" min="0" placeholder="0"></td>
       <td><input type="number" class="cell-month2" min="0" placeholder="0"></td>
       <td><input type="number" class="cell-month3" min="0" placeholder="0"></td>
-      <td><input type="number" class="cell-average input-readonly" readonly placeholder="0"></td>
+      <td><input type="text" inputmode="numeric" data-original-type="number" class="cell-average input-readonly" readonly placeholder="0"></td>
       <td><textarea class="cell-notes" rows="1" placeholder="הערות"></textarea></td>
       <td class="col-actions">
         <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
@@ -422,7 +947,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const DEFAULT_EXPENSES_LIST = [
-    'משכתנתא', 'הלוואות', 'ביטוח בריאות משלים', 'ביטוח בריאות פרטי', 'ביטוח חיים', 'ביטוח דירה',
+    'משכנתא', 'הלוואות', 'ביטוח בריאות משלים', 'ביטוח בריאות פרטי', 'ביטוח חיים', 'ביטוח דירה',
     'הקצאה להוצאות בלת"מ', 'חיסכון', 'מזון ומכולת', 'ביגוד והנעלה', 'חשמל', 'גז',
     'ארנונה ומים', 'מטפלת/שמרטף/מעון/גן', 'ביה"ס וחומרי לימוד', 'חוגים', 'דמי כיס',
     'טלפון קווי', 'טלפון סלולרי', 'אינטרנט', 'שכ"ד', 'וועד בית', 'עוזרת',
@@ -433,6 +958,7 @@ document.addEventListener('DOMContentLoaded', () => {
   ];
 
   const EXPENSE_CATEGORY_MAP = {
+    'משכנתא': 'housing',
     'משכתנתא': 'housing',
     'שכ"ד': 'housing',
     'חשמל': 'housing',
@@ -540,11 +1066,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     expensesArray.forEach(item => {
       if (!item || !item.category) return;
-      const category = item.category;
+      const category = LEGACY_EXPENSE_LABELS[item.category] || item.category;
       const existingRow = rowMap[category];
       if (existingRow) {
         Object.keys(item).forEach(key => {
-          if (key === 'category') return;
+          if (key === 'category' || item[key] === null || item[key] === undefined) return;
           let input = existingRow.querySelector(`.cell-${key}`);
           if (!input) {
             const hyphenatedKey = key.replace(/_/g, '-');
@@ -596,7 +1122,10 @@ document.addEventListener('DOMContentLoaded', () => {
       row.style.opacity = '0';
       setTimeout(() => {
         row.remove();
+        refreshPropertyOptions();
         saveDraft();
+        updateLiveFinancialKPIs();
+        scheduleQualityCheck();
       }, 200);
     }
   });
@@ -697,48 +1226,25 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateLiveFinancialKPIs() {
+    const t = computeTotals();
+    const signed = (n) => `${n > 0 ? '+' : ''}${n.toLocaleString('he-IL')} ₪`;
+
     // --- STEP 2: Monthly Cashflow ---
-    const p1Type = p1EmploymentTypeSelect ? p1EmploymentTypeSelect.value : 'employee';
-    const p1Emp = p1Type !== 'self_employed' ? parseNumber(document.getElementById('p1_employee_income')?.value) : 0;
-    const p1Bonus = p1Type !== 'self_employed' ? parseNumber(document.getElementById('p1_bonuses')?.value) / 12 : 0;
-    const p1Self = p1Type === 'self_employed' ? parseNumber(document.getElementById('p1_self_employed_income')?.value) : 0;
-
-    const p2Type = p2EmploymentTypeSelect ? p2EmploymentTypeSelect.value : 'employee';
-    const p2Emp = p2Type !== 'self_employed' ? parseNumber(document.getElementById('p2_employee_income')?.value) : 0;
-    const p2Bonus = p2Type !== 'self_employed' ? parseNumber(document.getElementById('p2_bonuses')?.value) / 12 : 0;
-    const p2Self = p2Type === 'self_employed' ? parseNumber(document.getElementById('p2_self_employed_income')?.value) : 0;
-
-    let additionalIncome = 0;
-    document.querySelectorAll('#additionalIncomeTable tbody tr').forEach(r => {
-      additionalIncome += parseNumber(r.querySelector('.cell-amount')?.value);
-    });
-
-    const totalIncome = Math.round(p1Emp + p1Bonus + p1Self + p2Emp + p2Bonus + p2Self + additionalIncome);
-    
-    let totalExpenses = 0;
-    document.querySelectorAll('#expensesTable tbody tr').forEach(r => {
-      const avg = parseNumber(r.querySelector('.cell-average')?.value);
-      totalExpenses += avg;
-    });
-    totalExpenses = Math.round(totalExpenses);
-
-    const freeCashflow = totalIncome - totalExpenses;
-
     const kpiTotalIncomeEl = document.getElementById('kpiTotalIncome');
     const kpiTotalExpensesEl = document.getElementById('kpiTotalExpenses');
     const kpiFreeCashflowEl = document.getElementById('kpiFreeCashflow');
     const kpiCashflowHintEl = document.getElementById('kpiCashflowHint');
 
-    if (kpiTotalIncomeEl) kpiTotalIncomeEl.textContent = `${totalIncome.toLocaleString('he-IL')} ₪`;
-    if (kpiTotalExpensesEl) kpiTotalExpensesEl.textContent = `${totalExpenses.toLocaleString('he-IL')} ₪`;
+    if (kpiTotalIncomeEl) kpiTotalIncomeEl.textContent = `${t.monthly_income.toLocaleString('he-IL')} ₪`;
+    if (kpiTotalExpensesEl) kpiTotalExpensesEl.textContent = `${t.monthly_expenses.toLocaleString('he-IL')} ₪`;
     if (kpiFreeCashflowEl) {
-      kpiFreeCashflowEl.textContent = `${(freeCashflow > 0 ? '+' : '')}${freeCashflow.toLocaleString('he-IL')} ₪`;
-      kpiFreeCashflowEl.className = `kpi-val text-cashflow ${freeCashflow >= 0 ? 'positive' : 'negative'}`;
+      kpiFreeCashflowEl.textContent = signed(t.free_cashflow);
+      kpiFreeCashflowEl.className = `kpi-val text-cashflow ${t.free_cashflow >= 0 ? 'positive' : 'negative'}`;
     }
     if (kpiCashflowHintEl) {
-      if (freeCashflow > 0) {
+      if (t.free_cashflow > 0) {
         kpiCashflowHintEl.textContent = 'עודף תזרימי חיובי לחיסכון, השקעה ויעדים';
-      } else if (freeCashflow < 0) {
+      } else if (t.free_cashflow < 0) {
         kpiCashflowHintEl.textContent = 'גירעון תזרימי חודשי (הוצאות עולות על הכנסות)';
       } else {
         kpiCashflowHintEl.textContent = 'תזרים מאוזן';
@@ -746,69 +1252,42 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- STEP 3: Balance Sheet (Net Worth) ---
-    let realEstateVal = 0;
-    let realEstateMortgage = 0;
-    document.querySelectorAll('#realEstateTable tbody tr').forEach(r => {
-      realEstateVal += parseNumber(r.querySelector('.cell-current-val')?.value);
-      realEstateMortgage += parseNumber(r.querySelector('.cell-mortgage-rem')?.value);
-    });
-
-    let vehiclesVal = 0;
-    document.querySelectorAll('#vehiclesTable tbody tr').forEach(r => {
-      vehiclesVal += parseNumber(r.querySelector('.cell-value')?.value);
-    });
-
-    let financialAssetsVal = 0;
-    document.querySelectorAll('#financialAssetsTable tbody tr').forEach(r => {
-      financialAssetsVal += parseNumber(r.querySelector('.cell-amount')?.value);
-    });
-
-    const totalAssets = Math.round(realEstateVal + vehiclesVal + financialAssetsVal);
-
-    let mortgageTableRemaining = 0;
-    document.querySelectorAll('#mortgageTable tbody tr').forEach(r => {
-      mortgageTableRemaining += parseNumber(r.querySelector('.cell-remaining')?.value);
-    });
-    const mortgageTotal = Math.max(realEstateMortgage, mortgageTableRemaining);
-
-    let otherLiabilities = 0;
-    document.querySelectorAll('#liabilitiesTable tbody tr').forEach(r => {
-      otherLiabilities += parseNumber(r.querySelector('.cell-current')?.value);
-    });
-
-    const totalLiabilities = Math.round(mortgageTotal + otherLiabilities);
-    const netWorth = totalAssets - totalLiabilities;
-
     const kpiTotalAssetsEl = document.getElementById('kpiTotalAssets');
     const kpiTotalLiabilitiesEl = document.getElementById('kpiTotalLiabilities');
     const kpiNetWorthEl = document.getElementById('kpiNetWorth');
 
-    if (kpiTotalAssetsEl) kpiTotalAssetsEl.textContent = `${totalAssets.toLocaleString('he-IL')} ₪`;
-    if (kpiTotalLiabilitiesEl) kpiTotalLiabilitiesEl.textContent = `${totalLiabilities.toLocaleString('he-IL')} ₪`;
+    if (kpiTotalAssetsEl) kpiTotalAssetsEl.textContent = `${t.total_assets.toLocaleString('he-IL')} ₪`;
+    if (kpiTotalLiabilitiesEl) kpiTotalLiabilitiesEl.textContent = `${t.total_liabilities.toLocaleString('he-IL')} ₪`;
     if (kpiNetWorthEl) {
-      kpiNetWorthEl.textContent = `${(netWorth > 0 ? '+' : '')}${netWorth.toLocaleString('he-IL')} ₪`;
-      kpiNetWorthEl.className = `kpi-val text-networth ${netWorth >= 0 ? 'positive' : 'negative'}`;
+      kpiNetWorthEl.textContent = signed(t.net_worth);
+      kpiNetWorthEl.className = `kpi-val text-networth ${t.net_worth >= 0 ? 'positive' : 'negative'}`;
     }
   }
 
-  form.addEventListener('input', () => {
+  form.addEventListener('input', (e) => {
     saveDraft();
     validateAllStepsDots();
     updateComputedExpensesTotal();
     updateLiveFinancialKPIs();
+    if (e.target && /^p[12]_first_name$/.test(e.target.id)) {
+      updatePartnerLabels();
+      refreshPersonCombos();
+      saveDraft();
+    }
+    if (e.target && e.target.closest && e.target.closest('#realEstateTable')) refreshPropertyOptions();
+    scheduleQualityCheck();
   });
   form.addEventListener('change', () => {
     saveDraft();
     toggleConditionalFields();
     validateAllStepsDots();
     updateLiveFinancialKPIs();
+    scheduleQualityCheck();
   });
 
   clearDraftBtn.addEventListener('click', () => {
     if (confirm('האם אתה בטוח שברצונך למחוק את כל הנתונים ולהתחיל מחדש?')) {
-      localStorage.removeItem('financial_questionnaire_draft');
-      localStorage.removeItem('financial_questionnaire_step');
-      localStorage.removeItem('financial_questionnaire_visited_steps');
+      clearAllStoredData();
       location.reload();
     }
   });
@@ -872,6 +1351,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!data) throw new Error('קובץ ריק');
 
         clearAllDynamicTables();
+        resetFormFields();
+        loadedFromFile = true;
 
         populateFields(data);
 
@@ -932,6 +1413,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         toggleConditionalFields();
         updateComputedExpensesTotal();
+        updateLiveFinancialKPIs();
+        collectQualityFlags();
 
         visitedSteps.clear();
         for (let s = 1; s <= TOTAL_STEPS; s++) {
@@ -1088,7 +1571,10 @@ document.addEventListener('DOMContentLoaded', () => {
       sidebarStepBadge.textContent = `שלב ${stepNumber} מתוך ${TOTAL_STEPS}`;
     }
 
-    const sections = STEP_SECTIONS[stepNumber] || [];
+    const SINGLE_TITLES = { partner1_fieldset: 'הפרטים שלכם', p1_income_fieldset: 'הכנסות ותעסוקה' };
+    const sections = (STEP_SECTIONS[stepNumber] || [])
+      .filter(sec => !document.getElementById(sec.id)?.classList.contains('hidden'))
+      .map(sec => (!hasPartner() && SINGLE_TITLES[sec.id]) ? Object.assign({}, sec, { title: SINGLE_TITLES[sec.id] }) : sec);
     sidebarNavList.innerHTML = '';
 
     if (sections.length === 0) {
@@ -1165,11 +1651,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const row = document.createElement('tr');
     row.innerHTML = TABLE_TEMPLATES[tableName]();
     tableBody.appendChild(row);
+    labelTableCells(row);
+
+    // Real estate rows get a stable id, so a mortgage track can point at its property
+    if (tableName === 'realEstateTable') {
+      row.dataset.rowId = (initialData && initialData.id) || newRowId('re');
+    }
 
     // If this is the expenses table, assign category attribute
     if (tableName === 'expensesTable') {
-      const initialCat = (initialData && initialData.category) ? initialData.category : '';
+      const initialCat = (initialData && initialData.category) ? (LEGACY_EXPENSE_LABELS[initialData.category] || initialData.category) : '';
       row.setAttribute('data-category', getExpenseCategory(initialCat));
+      row.dataset.categoryId = (initialData && initialData.category_id) || EXPENSE_IDS[initialCat] || 'custom';
 
       const catInput = row.querySelector('.cell-category');
       if (catInput) {
@@ -1207,13 +1700,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (initialData) {
       Object.keys(initialData).forEach(key => {
+        if (initialData[key] === null || initialData[key] === undefined) return;
         let input = row.querySelector(`.cell-${key}`);
         if (!input) {
           const hyphenatedKey = key.replace(/_/g, '-');
           input = row.querySelector(`.cell-${hyphenatedKey}`);
         }
         if (input) {
-          if (input.type === 'checkbox') {
+          if (input.classList.contains('combo-input')) {
+            restoreCombo(input.closest('.combo-cell'), initialData[key], initialData[`${key}_key`]);
+          } else if (input.classList.contains('cell-property-id')) {
+            input.dataset.pending = initialData[key];
+          } else if (input.type === 'checkbox') {
             input.checked = initialData[key];
           } else {
             input.value = initialData[key];
@@ -1224,6 +1722,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     }
+
+    row.querySelectorAll('.combo-cell').forEach(autoSelectSingleChoice);
+    if (tableName === 'mortgageTable' || tableName === 'realEstateTable') refreshPropertyOptions();
 
     // Tab key Excel navigation: automatically add row when pressing Tab on the last field of the last row
     const focusableCells = row.querySelectorAll('input, select, textarea');
@@ -1263,6 +1764,18 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function toggleConditionalFields() {
+    const partnerOn = hasPartner();
+    ['partner2_fieldset', 'p2_income_fieldset'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('hidden', !partnerOn);
+    });
+    if (lastHouseholdState !== partnerOn) {
+      lastHouseholdState = partnerOn;
+      updatePartnerLabels();
+      refreshPersonCombos();
+      renderSidebarNav(currentStep);
+    }
+
     const isSingleParent = toggleSingleParentCheckbox.checked;
     condSingleParent.classList.toggle('hidden', !isSingleParent);
 
@@ -1350,7 +1863,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let isValid = true;
 
     if (!silent) {
-      stepEl.querySelectorAll('.form-group.has-error').forEach(group => {
+      stepEl.querySelectorAll('.form-group.has-error, .consent-row.has-error').forEach(group => {
         group.classList.remove('has-error');
         const errorMsg = group.querySelector('.error-message');
         if (errorMsg) errorMsg.remove();
@@ -1364,11 +1877,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       
-      const formGroup = input.closest('.form-group');
+      // Skip fields of a hidden section (e.g. partner 2 when filling alone)
+      if (input.parentElement && input.parentElement.closest('.hidden')) {
+        return;
+      }
+
+      const formGroup = input.closest('.form-group') || input.closest('.consent-row');
       let fieldError = '';
 
-      if (input.hasAttribute('required') && !input.value.trim()) {
-        fieldError = 'שדה זה הוא חובה';
+      if (input.hasAttribute('required') && (input.type === 'checkbox' ? !input.checked : !input.value.trim())) {
+        fieldError = input.type === 'checkbox' ? 'יש לאשר כדי לשלוח את השאלון' : 'שדה זה הוא חובה';
       }
       
       else if (input.type === 'email' && input.value.trim()) {
@@ -1441,7 +1959,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Scroll to first invalid field and apply shake animation
     if (!isValid && !silent) {
       setTimeout(() => {
-        const firstErrorEl = stepEl.querySelector('.form-group.has-error, input[style*="var(--color-error)"], textarea[style*="var(--color-error)"]');
+        let firstErrorEl = stepEl.querySelector('.form-group.has-error, .consent-row.has-error, input[style*="var(--color-error)"], textarea[style*="var(--color-error)"]');
+        if (firstErrorEl && firstErrorEl.classList.contains('combo-input')) firstErrorEl = firstErrorEl.closest('.combo-cell');
         if (firstErrorEl) {
           firstErrorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
           firstErrorEl.classList.add('shake-highlight');
@@ -1463,6 +1982,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = getFormDataJSON();
       localStorage.setItem('financial_questionnaire_draft', JSON.stringify(data));
       localStorage.setItem('financial_questionnaire_step', currentStep);
+      localStorage.setItem(STORAGE_KEYS.savedAt, String(Date.now()));
       localStorage.setItem('financial_questionnaire_visited_steps', JSON.stringify(Array.from(visitedSteps)));
       
       const now = new Date();
@@ -1479,8 +1999,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function loadDraft() {
     try {
-      const draftStr = localStorage.getItem('financial_questionnaire_draft');
+      const draftStr = getStored(STORAGE_KEYS.draft);
       if (!draftStr) return;
+
+      // Privacy: an old unsent draft is deleted automatically
+      const savedAt = parseInt(getStored(STORAGE_KEYS.savedAt) || '0', 10);
+      if (savedAt && Date.now() - savedAt > (CFG.DRAFT_MAX_AGE_DAYS || 14) * 86400000) {
+        clearAllStoredData();
+        return;
+      }
 
       const data = JSON.parse(draftStr);
       if (!data) return;
@@ -1596,58 +2123,62 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Clears every named field before a JSON file is loaded, so nothing from a previous fill is left behind.
+  function resetFormFields() {
+    form.querySelectorAll('input[name], select[name], textarea[name]').forEach(el => {
+      if (el.id === 'fill_date' || el.name === 'hp_website') return;
+      if (el.type === 'checkbox') {
+        el.checked = false;
+      } else if (el.tagName === 'SELECT') {
+        el.selectedIndex = Math.max(0, Array.from(el.options).findIndex(o => o.defaultSelected));
+      } else {
+        el.value = '';
+      }
+    });
+  }
+
   function getFormDataJSON() {
-    return {
+    const partner2 = hasPartner();
+    const person = (n, employmentSelect) => ({
+      first_name: document.getElementById(`p${n}_first_name`).value,
+      last_name: document.getElementById(`p${n}_last_name`).value,
+      phone: document.getElementById(`p${n}_phone`).value,
+      email: document.getElementById(`p${n}_email`).value,
+      address: document.getElementById(`p${n}_address`).value,
+      age: nz(document.getElementById(`p${n}_age`).value),
+      employment_type: employmentSelect.value
+    });
+    const income = (n) => ({
+      job_title: document.getElementById(`p${n}_job_title`).value,
+      employee_income: nz(document.getElementById(`p${n}_employee_income`).value),
+      bonuses: nz(document.getElementById(`p${n}_bonuses`).value),
+      self_employed_income: nz(document.getElementById(`p${n}_self_employed_income`).value),
+      previous_jobs: document.getElementById(`p${n}_previous_jobs`).value,
+      notes: document.getElementById(`p${n}_income_notes`).value
+    });
+
+    return cleanEmpty({
       general: {
-        fill_date: fillDateInput.value
+        fill_date: fillDateInput.value,
+        household_type: householdTypeSelect ? householdTypeSelect.value : 'couple'
       },
-      partner1: {
-        first_name: document.getElementById('p1_first_name').value,
-        last_name: document.getElementById('p1_last_name').value,
-        phone: document.getElementById('p1_phone').value,
-        email: document.getElementById('p1_email').value,
-        address: document.getElementById('p1_address').value,
-        age: parseNumber(document.getElementById('p1_age').value),
-        employment_type: p1EmploymentTypeSelect.value
-      },
-      partner2: {
-        first_name: document.getElementById('p2_first_name').value,
-        last_name: document.getElementById('p2_last_name').value,
-        phone: document.getElementById('p2_phone').value,
-        email: document.getElementById('p2_email').value,
-        address: document.getElementById('p2_address').value,
-        age: parseNumber(document.getElementById('p2_age').value),
-        employment_type: p2EmploymentTypeSelect.value
-      },
+      partner1: person(1, p1EmploymentTypeSelect),
+      partner2: partner2 ? person(2, p2EmploymentTypeSelect) : null,
       family: {
         marital_status: maritalStatusSelect.value,
-        marriage_duration: parseNumber(document.getElementById('marriage_duration').value),
+        marriage_duration: nz(document.getElementById('marriage_duration').value),
         previous_marriage: previousMarriageSelect.value,
         notes: document.getElementById('family_notes').value,
         children: serializeTable('childrenTable', ['name', 'gender', 'age', 'notes', 'general_notes']),
         close_circle: serializeTable('circleTable', ['close_to', 'relation', 'financial_status', 'can_help', 'needs_help', 'wealth_transfer', 'notes'])
       },
-      income1: {
-        job_title: document.getElementById('p1_job_title').value,
-        employee_income: parseNumber(document.getElementById('p1_employee_income').value),
-        bonuses: parseNumber(document.getElementById('p1_bonuses').value),
-        self_employed_income: parseNumber(document.getElementById('p1_self_employed_income').value),
-        previous_jobs: document.getElementById('p1_previous_jobs').value,
-        notes: document.getElementById('p1_income_notes').value
-      },
-      income2: {
-        job_title: document.getElementById('p2_job_title').value,
-        employee_income: parseNumber(document.getElementById('p2_employee_income').value),
-        bonuses: parseNumber(document.getElementById('p2_bonuses').value),
-        self_employed_income: parseNumber(document.getElementById('p2_self_employed_income').value),
-        previous_jobs: document.getElementById('p2_previous_jobs').value,
-        notes: document.getElementById('p2_income_notes').value
-      },
+      income1: income(1),
+      income2: partner2 ? income(2) : null,
       additional_income: serializeTable('additionalIncomeTable', ['source', 'amount', 'notes']),
       expenses: serializeTable('expensesTable', ['category', 'month1', 'month2', 'month3', 'average', 'notes']),
       assets: {
         real_estate: serializeTable('realEstateTable', ['description', 'purchase_val', 'current_val', 'mortgage_orig', 'mortgage_rem', 'notes']),
-        mortgages: serializeTable('mortgageTable', ['bank', 'track', 'orig', 'remaining', 'rate', 'end_date', 'monthly', 'notes']),
+        mortgages: serializeTable('mortgageTable', ['property_id', 'bank', 'track', 'orig', 'remaining', 'rate', 'end_date', 'monthly', 'notes']),
         vehicles: serializeTable('vehiclesTable', ['model', 'year', 'value', 'notes']),
         future_assets_details: document.getElementById('future_assets_details').value,
         financial_assets: serializeTable('financialAssetsTable', ['type', 'company', 'amount', 'notes'])
@@ -1662,27 +2193,27 @@ document.addEventListener('DOMContentLoaded', () => {
       liabilities: serializeTable('liabilitiesTable', ['lender', 'purpose', 'orig', 'current', 'monthly', 'start', 'end', 'rate']),
       pensions: serializeTable('pensionsTable', ['owner', 'company', 'is_executive_insurance', 'balance', 'monthly_deposit', 'has_life_insurance', 'annuity_coefficient', 'notes']),
       allowances: serializeTable('allowancesTable', ['source', 'recipient', 'amount', 'notes']),
-      insurances: serializeTable('insurancesTable', ['type', 'insured', 'company', 'premium', 'agent', 'cov_type']),
-      
+      insurances: serializeTable('insurancesTable', ['type', 'insured', 'company', 'premium', 'sum_insured', 'agent', 'cov_type']),
+
       toggles: {
         single_parent: toggleSingleParentCheckbox.checked,
         second_marriage: toggleSecondMarriageCheckbox.checked,
         self_employed: toggleSelfEmployedCheckbox.checked
       },
-      
+
       single_parent: !(condSingleParent.classList.contains('hidden')) ? {
         alimony_regular: document.getElementById('alimony_regular').value,
         ex_support_capability: document.getElementById('ex_support_capability').value,
         alimony_insured: document.getElementById('alimony_insured').value,
         alimony_end_plan: document.getElementById('alimony_end_plan').value
       } : null,
-      
+
       second_marriage: !(condSecondMarriage.classList.contains('hidden')) ? {
         has_prenup: document.getElementById('has_prenup').value,
         beneficiaries: document.getElementById('will_beneficiaries').value,
         property_agreements: document.getElementById('property_agreements').value
       } : null,
-      
+
       self_employed: !(condSelfEmployed.classList.contains('hidden')) ? {
         stability: document.getElementById('business_stability').value,
         risks: document.getElementById('business_risks').value,
@@ -1691,7 +2222,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       goals: {
         has_emergency_fund: hasEmergencyFundSelect.value,
-        emergency_fund_amount: parseNumber(document.getElementById('emergency_fund_amount').value),
+        emergency_fund_amount: nz(document.getElementById('emergency_fund_amount').value),
         emergency_fund_location: document.getElementById('emergency_fund_location') ? document.getElementById('emergency_fund_location').value : '',
         capital_receipts: serializeTable('capitalReceiptsTable', ['source', 'amount', 'when', 'notes']),
         recurring_goals: serializeTable('recurringGoalsTable', ['description', 'freq', 'cost', 'notes']),
@@ -1699,7 +2230,7 @@ document.addEventListener('DOMContentLoaded', () => {
         children_goals: serializeTable('childrenGoalsTable', ['description', 'cost', 'age', 'notes']),
         expectations: document.getElementById('consultation_expectations').value
       }
-    };
+    });
   }
 
   function parseNumber(val) {
@@ -1789,7 +2320,7 @@ document.addEventListener('DOMContentLoaded', () => {
     rows.forEach(row => {
       const obj = {};
       let hasVal = false;
-      
+
       fieldClasses.forEach(field => {
         let input = row.querySelector(`.cell-${field}`);
         if (!input) {
@@ -1799,18 +2330,27 @@ document.addEventListener('DOMContentLoaded', () => {
         if (input) {
           let val = input.value;
           if (input.type === 'number' || input.getAttribute('data-original-type') === 'number') {
-            val = input.value === '' ? '' : parseNumber(val);
+            val = nz(val);
           } else if (input.type === 'checkbox') {
             val = input.checked;
           }
           obj[field] = val;
-          if (val !== '' && val !== false) {
+          // "Pick from a list" cells also report which list item was chosen ('other' = typed by the client)
+          if (input.classList.contains('combo-input')) {
+            obj[`${field}_key`] = input.dataset.key || null;
+          }
+          if (val !== '' && val !== null && val !== false) {
             hasVal = true;
           }
         }
       });
 
       if (hasVal) {
+        if (row.dataset.rowId) obj.id = row.dataset.rowId;
+        if (tableId === 'expensesTable') {
+          obj.category_id = row.dataset.categoryId || 'custom';
+          obj.category_group = row.getAttribute('data-category') || 'other';
+        }
         result.push(obj);
       }
     });
@@ -1818,68 +2358,179 @@ document.addEventListener('DOMContentLoaded', () => {
     return result;
   }
 
-  async function submitForm() {
-    const data = getFormDataJSON();
-    
-    const p1Name = document.getElementById('p1_first_name')?.value?.trim() || '';
-    const p2Name = document.getElementById('p2_first_name')?.value?.trim() || '';
-    const clientName = (p1Name && p2Name) ? `${p1Name} ו${p2Name}` : (p1Name || 'הלקוח');
+  const submitErrorModal = document.getElementById('submitErrorModal');
 
-    // Loading state for submission buttons
-    nextBtn.disabled = true;
-    const originalNextBtnHtml = nextBtn.innerHTML;
-    nextBtn.innerHTML = `שולח נתונים מאובטחים ליועץ... ⏳`;
-    
-    if (floatingNextBtn) {
-      floatingNextBtn.disabled = true;
-      floatingNextBtn.innerHTML = `שולח נתונים... ⏳`;
+  function clientNameFromForm() {
+    const p1Name = typedName(1);
+    const p2Name = hasPartner() ? typedName(2) : '';
+    return (p1Name && p2Name) ? `${p1Name} ו${p2Name}` : (p1Name || 'הלקוח');
+  }
+
+  // The exact JSON that is sent to the webhook: the form data + a "meta" block for the receiving side.
+  function buildSubmissionPayload() {
+    const data = getFormDataJSON();
+    const utm = {};
+    ['utm_source', 'utm_medium', 'utm_campaign'].forEach(k => { utm[k] = urlParams.get(k) || null; });
+    data.meta = cleanEmpty({
+      submission_id: getSubmissionId(),
+      schema_version: CFG.SCHEMA_VERSION || null,
+      submitted_at: new Date().toISOString(),
+      started_at: new Date(pageLoadedAt).toISOString(),
+      fill_seconds: Math.round((Date.now() - pageLoadedAt) / 1000),
+      advisor: trackedAdvisor,
+      source: utm,
+      device: window.innerWidth <= 768 ? 'mobile' : 'desktop',
+      language: navigator.language || null,
+      loaded_from_file: loadedFromFile,
+      page_url: window.location.origin + window.location.pathname,
+      consent: {
+        privacy_policy: !!document.getElementById('consent_privacy')?.checked,
+        policy_version: CFG.POLICY_VERSION || null,
+        accepted_at: new Date().toISOString()
+      },
+      totals: computeTotals(),
+      quality_flags: collectQualityFlags(),
+      turnstile_token: turnstileToken
+    });
+    return data;
+  }
+
+  // POST with timeout + retries. Success ONLY when the server answers 2xx.
+  async function postSubmission(payload, onAttempt) {
+    const attempts = CFG.SUBMIT_ATTEMPTS || 3;
+    let detail = '';
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      if (onAttempt) onAttempt(attempt, attempts);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), CFG.SUBMIT_TIMEOUT_MS || 20000);
+      try {
+        const response = await fetch(N8N_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+        clearTimeout(timer);
+        if (response.ok) return { ok: true };
+        detail = `קוד תשובה ${response.status}`;
+        console.warn('Webhook returned a non-success status:', response.status);
+        // A 4xx (other than "too many requests / timeout") will not fix itself by retrying.
+        if (response.status >= 400 && response.status < 500 && response.status !== 429 && response.status !== 408) break;
+      } catch (err) {
+        clearTimeout(timer);
+        detail = err.name === 'AbortError' ? 'השרת לא הגיב בזמן' : 'בעיית תקשורת / חיבור לאינטרנט';
+        console.error('Error submitting questionnaire to webhook:', err);
+      }
+      if (attempt < attempts) await sleep(1500 * attempt);
+    }
+    return { ok: false, detail };
+  }
+
+  async function submitForm() {
+    if (isSubmitting) return;
+
+    // Honeypot: real people never see this field. Pretend it worked, so bots learn nothing.
+    const honeypot = document.getElementById('hp_website');
+    if (honeypot && honeypot.value.trim() !== '') {
+      showSuccessModal(getFormDataJSON(), clientNameFromForm());
+      return;
     }
 
-    try {
-      // Direct POST to n8n Webhook
-      const response = await fetch(N8N_WEBHOOK_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data)
-      });
+    const lastSubmitAt = parseInt(getStored(STORAGE_KEYS.lastSubmitAt) || '0', 10);
+    if (lastSubmitAt && Date.now() - lastSubmitAt < (CFG.SUBMIT_COOLDOWN_SECONDS || 60) * 1000) {
+      showNotification('השאלון נשלח זה עתה. אם צריך לשלוח שוב, נסו שוב בעוד דקה.', 'error');
+      return;
+    }
 
-      if (!response.ok) {
-        console.warn('n8n Webhook returned non-200 status:', response.status);
+    if (CFG.TURNSTILE_SITE_KEY && !turnstileToken) {
+      showNotification('לפני השליחה נא לאשר שאינכם רובוט (בתחתית השלב האחרון).', 'error');
+      return;
+    }
+
+    isSubmitting = true;
+    const clientName = clientNameFromForm();
+    const payload = buildSubmissionPayload();
+    lastPayload = payload;
+
+    const originalNextBtnHtml = nextBtn.innerHTML;
+    nextBtn.disabled = true;
+    nextBtn.innerHTML = 'שולח נתונים מאובטחים ליועץ... ⏳';
+    if (floatingNextBtn) {
+      floatingNextBtn.disabled = true;
+      floatingNextBtn.innerHTML = 'שולח נתונים... ⏳';
+    }
+
+    const result = await postSubmission(payload, (attempt, total) => {
+      if (attempt > 1) {
+        nextBtn.innerHTML = `מנסים שוב (${attempt} מתוך ${total})... ⏳`;
+        if (floatingNextBtn) floatingNextBtn.innerHTML = `מנסים שוב (${attempt}/${total})... ⏳`;
       }
+    });
 
-      // Clear draft storage after successful transmission
-      localStorage.removeItem('financial_questionnaire_draft');
+    isSubmitting = false;
+    nextBtn.disabled = false;
+    nextBtn.innerHTML = originalNextBtnHtml;
+    if (floatingNextBtn) {
+      floatingNextBtn.disabled = false;
+      floatingNextBtn.innerHTML = originalNextBtnHtml;
+    }
+
+    if (result.ok) {
+      setStored(STORAGE_KEYS.lastSubmitAt, String(Date.now()));
+      clearAllStoredData();
       if (draftStatusText) draftStatusText.textContent = 'השאלון נשלח בהצלחה ליועץ!';
       if (floatingSaveText) floatingSaveText.textContent = 'השאלון נשלח בהצלחה ליועץ!';
-
-      // Show completion experience
-      showSuccessModal(data, clientName);
-    } catch (err) {
-      console.error('Error submitting questionnaire to webhook:', err);
-      showNotification('חלה בעיית תקשורת זמנית בשליחה לענן, אך כל הנתונים שמורים בדפדפן! לחץ שוב או שמור עותק גיבוי.', 'error');
-    } finally {
-      nextBtn.disabled = false;
-      nextBtn.innerHTML = originalNextBtnHtml;
-      if (floatingNextBtn) {
-        floatingNextBtn.disabled = false;
-        floatingNextBtn.innerHTML = originalNextBtnHtml;
-      }
+      showSuccessModal(payload, clientName);
+    } else {
+      // Nothing is deleted: the draft stays in the browser and the client can retry or send us a backup file.
+      resetTurnstile();
+      showSubmitError(result.detail, payload, clientName);
     }
   }
 
+  function showSubmitError(detail, payload, clientName) {
+    if (!submitErrorModal) return;
+    const detailEl = document.getElementById('submitErrorDetail');
+    if (detailEl) detailEl.textContent = detail ? `פרטים טכניים: ${detail}` : '';
+
+    document.getElementById('retrySubmitBtn').onclick = () => {
+      submitErrorModal.classList.add('hidden');
+      submitForm();
+    };
+    document.getElementById('errorDownloadJsonBtn').onclick = () => downloadJsonFile(payload, clientName);
+    document.getElementById('closeSubmitErrorBtn').onclick = () => submitErrorModal.classList.add('hidden');
+
+    const waBtn = document.getElementById('errorWhatsappBtn');
+    const advisor = (CFG.ADVISORS || [])[0];
+    if (waBtn) {
+      if (advisor) {
+        const msg = `היי ${advisor.name}, ניסיתי לשלוח את שאלון הייעוץ הפיננסי באתר עבור ${clientName} אבל השליחה לא הצליחה. אפשר לעזור?`;
+        waBtn.href = `https://wa.me/${advisor.whatsapp}?text=${encodeURIComponent(msg)}`;
+      } else {
+        waBtn.classList.add('hidden');
+      }
+    }
+    submitErrorModal.classList.remove('hidden');
+  }
+
   function showSuccessModal(data, clientName) {
-    const waBtn1 = document.getElementById('successWhatsappBtn1');
-    const waBtn2 = document.getElementById('successWhatsappBtn2');
     const downloadPdfBtn = document.getElementById('downloadPdfBtn');
     const downloadJsonBackupBtn = document.getElementById('downloadJsonBackupBtn');
 
-    const waMsgEitan = encodeURIComponent(`היי איתן, סיימתי למלא את שאלון הייעוץ הפיננסי באתר עבור ${clientName}. כל הנתונים נשלחו בהצלחה למערכת!`);
-    const waMsgMaor = encodeURIComponent(`היי מאור, סיימתי למלא את שאלון הייעוץ הפיננסי באתר עבור ${clientName}. כל הנתונים נשלחו בהצלחה למערכת!`);
-    
-    if (waBtn1) waBtn1.href = `https://wa.me/972584442400?text=${waMsgEitan}`;
-    if (waBtn2) waBtn2.href = `https://wa.me/972503333164?text=${waMsgMaor}`;
+    // WhatsApp message to the advisors is an optional bonus - they are notified automatically anyway.
+    const advisors = CFG.ADVISORS || [];
+    [['successWhatsappBtn1', advisors[0]], ['successWhatsappBtn2', advisors[1]]].forEach(([id, advisor]) => {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      if (!advisor) {
+        btn.classList.add('hidden');
+        return;
+      }
+      const msg = `היי ${advisor.name}, סיימתי למלא את שאלון הייעוץ הפיננסי באתר עבור ${clientName}. כל הנתונים נשלחו בהצלחה למערכת!`;
+      btn.href = `https://wa.me/${advisor.whatsapp}?text=${encodeURIComponent(msg)}`;
+      const label = btn.querySelector('span');
+      if (label) label.textContent = `שלח וואטסאפ ל${advisor.name}`;
+    });
 
     if (downloadPdfBtn) {
       downloadPdfBtn.onclick = () => generateAndPrintPdfSummary(data, clientName);
@@ -1919,51 +2570,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const family = data.family || {};
     const fillDate = data.general?.fill_date || new Date().toLocaleDateString('he-IL');
 
-    // Compute live metrics for report
-    const inc1 = (parseFloat(data.income1?.employee_income) || 0) + (parseFloat(data.income1?.self_employed_income) || 0) + ((parseFloat(data.income1?.bonuses) || 0) / 12);
-    const inc2 = (parseFloat(data.income2?.employee_income) || 0) + (parseFloat(data.income2?.self_employed_income) || 0) + ((parseFloat(data.income2?.bonuses) || 0) / 12);
-    
-    let otherInc = 0;
-    if (Array.isArray(data.other_income)) {
-      data.other_income.forEach(row => otherInc += (parseFloat(row.amount) || 0));
-    }
-    const totalIncome = inc1 + inc2 + otherInc;
-
-    let totalExpenses = 0;
-    if (Array.isArray(data.expenses)) {
-      data.expenses.forEach(row => totalExpenses += (parseFloat(row.amount) || 0));
-    }
-    const freeCashflow = totalIncome - totalExpenses;
-
-    let totalAssets = 0;
-    let totalLiabilities = 0;
-
-    if (Array.isArray(data.real_estate)) {
-      data.real_estate.forEach(r => {
-        totalAssets += (parseFloat(r.current_value) || 0);
-        totalLiabilities += (parseFloat(r.mortgage_balance) || 0);
-      });
-    }
-    if (Array.isArray(data.mortgages)) {
-      data.mortgages.forEach(m => totalLiabilities += (parseFloat(m.current_balance) || 0));
-    }
-    if (Array.isArray(data.vehicles)) {
-      data.vehicles.forEach(v => totalAssets += (parseFloat(v.estimated_value) || 0));
-    }
-    if (Array.isArray(data.bank_accounts)) {
-      data.bank_accounts.forEach(b => {
-        const bal = parseFloat(b.current_balance) || 0;
-        if (bal >= 0) totalAssets += bal;
-        else totalLiabilities += Math.abs(bal);
-      });
-    }
-    if (Array.isArray(data.financial_assets)) {
-      data.financial_assets.forEach(a => totalAssets += (parseFloat(a.balance) || 0));
-    }
-    if (Array.isArray(data.liabilities)) {
-      data.liabilities.forEach(l => totalLiabilities += (parseFloat(l.current_balance) || 0));
-    }
-    const netWorth = totalAssets - totalLiabilities;
+    // Totals are computed once (same numbers as the live cards on screen)
+    const totals = (data.meta && data.meta.totals) || computeTotals();
+    const totalIncome = totals.monthly_income;
+    const totalExpenses = totals.monthly_expenses;
+    const freeCashflow = totals.free_cashflow;
+    const totalAssets = totals.total_assets;
+    const totalLiabilities = totals.total_liabilities;
+    const netWorth = totals.net_worth;
+    const MARITAL = {
+      married: 'נשואים', cohabiting: 'בזוגיות / ידועים בציבור', single: 'רווק/ה',
+      divorced: 'גרוש/ה', widowed: 'אלמן/ה', single_parent: 'חד הורי/ת'
+    };
+    const childrenCount = Array.isArray(family.children) ? family.children.length : 0;
 
     const printWindow = window.open('', '_blank', 'width=950,height=850');
     if (!printWindow) {
@@ -1976,7 +2595,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <html dir="rtl" lang="he">
       <head>
         <meta charset="utf-8">
-        <title>סיכום נתונים פיננסיים - ${clientName}</title>
+        <title>סיכום נתונים פיננסיים - ${escapeHtml(clientName)}</title>
         <style>
           @import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap');
           @page { size: A4 portrait; margin: 12mm 15mm; }
@@ -2127,7 +2746,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="report-header">
           <div class="report-title">
             <h1>סיכום שאלון נתונים לייעוץ פיננסי</h1>
-            <p>לקוח/ה: <strong>${clientName}</strong> | תאריך מילוי: ${fillDate}</p>
+            <p>לקוח/ה: <strong>${escapeHtml(clientName)}</strong> | תאריך מילוי: ${escapeHtml(fillDate)}</p>
           </div>
           <span class="report-badge">עותק סיכום אישי</span>
         </div>
@@ -2138,21 +2757,21 @@ document.addEventListener('DOMContentLoaded', () => {
           <table class="info-table">
             <tr>
               <td class="label">בן/בת זוג 1:</td>
-              <td><strong>${p1.first_name || ''} ${p1.last_name || ''}</strong> ${p1.phone ? `(${p1.phone})` : ''} ${p1.email ? `| ${p1.email}` : ''}</td>
+              <td><strong>${escapeHtml(p1.first_name)} ${escapeHtml(p1.last_name)}</strong> ${p1.phone ? `(${escapeHtml(p1.phone)})` : ''} ${p1.email ? `| ${escapeHtml(p1.email)}` : ''}</td>
             </tr>
             ${p2.first_name ? `
             <tr>
               <td class="label">בן/בת זוג 2:</td>
-              <td><strong>${p2.first_name || ''} ${p2.last_name || ''}</strong> ${p2.phone ? `(${p2.phone})` : ''}</td>
+              <td><strong>${escapeHtml(p2.first_name)} ${escapeHtml(p2.last_name)}</strong> ${p2.phone ? `(${escapeHtml(p2.phone)})` : ''}</td>
             </tr>
             ` : ''}
             <tr>
               <td class="label">מצב משפחתי:</td>
-              <td>${family.marital_status || 'נשואים'} ${family.marriage_duration ? `(משך: ${family.marriage_duration} שנים)` : ''}</td>
+              <td>${escapeHtml(MARITAL[family.marital_status] || '')} ${family.marriage_duration ? `(משך: ${escapeHtml(family.marriage_duration)} שנים)` : ''}</td>
             </tr>
             <tr>
               <td class="label">ילדים:</td>
-              <td>${Array.isArray(data.children) ? `${data.children.length} ילדים` : 'ללא ילדים'}</td>
+              <td>${childrenCount ? `${childrenCount} ילדים` : 'ללא ילדים'}</td>
             </tr>
           </table>
         </div>
@@ -2206,7 +2825,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ${data.goals?.expectations ? `
             <tr>
               <td class="label">ציפיות מהייעוץ:</td>
-              <td>${data.goals.expectations}</td>
+              <td>${escapeHtml(data.goals.expectations)}</td>
             </tr>
             ` : ''}
           </table>
@@ -2377,6 +2996,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Expense filter: show the real number of default rows
+  const allExpensesPill = expenseCategoryTabs?.querySelector('.cat-pill[data-cat="all"]');
+  if (allExpensesPill) allExpensesPill.textContent = `הכל (${DEFAULT_EXPENSES_LIST.length})`;
+
+  updatePartnerLabels();
+  refreshPropertyOptions();
+  initTurnstile();
+
   // Setup Mobile Recommendation Smart Modal
   if (window.innerWidth <= 768 && !sessionStorage.getItem('mobile_rec_dismissed')) {
     if (mobileRecModal) {
@@ -2389,10 +3016,24 @@ document.addEventListener('DOMContentLoaded', () => {
     sessionStorage.setItem('mobile_rec_dismissed', 'true');
   });
 
-  if (sendSelfWhatsappBtn) {
-    const pageUrl = window.location.href;
-    const msg = encodeURIComponent(`היי, הנה קישור לשאלון הייעוץ הפיננסי כדי לפתוח ולמלא אותו בנוחות מהמחשב:\n${pageUrl}`);
-    sendSelfWhatsappBtn.href = `https://wa.me/?text=${msg}`;
+  // "Send myself the link" options (all free, no server): WhatsApp, e-mail, copy
+  {
+    const pageUrl = window.location.href.split('#')[0];
+    const text = `היי, הנה קישור לשאלון הייעוץ הפיננסי כדי לפתוח ולמלא אותו בנוחות מהמחשב:\n${pageUrl}`;
+    if (sendSelfWhatsappBtn) sendSelfWhatsappBtn.href = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    const sendSelfEmailBtn = document.getElementById('sendSelfEmailBtn');
+    if (sendSelfEmailBtn) {
+      sendSelfEmailBtn.href = `mailto:?subject=${encodeURIComponent('קישור לשאלון הייעוץ הפיננסי')}&body=${encodeURIComponent(text)}`;
+    }
+    const copyLinkBtn = document.getElementById('copyLinkBtn');
+    copyLinkBtn?.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(pageUrl);
+        copyLinkBtn.textContent = 'הקישור הועתק ✓';
+      } catch (err) {
+        window.prompt('העתיקו את הקישור:', pageUrl);
+      }
+    });
   }
 
   // Perform initial resize of all textareas to fit loaded values
