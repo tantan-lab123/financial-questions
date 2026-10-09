@@ -4,7 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>שאלון פרטים אישיים לייעוץ פיננסי אישי</title>
-  
+  <!-- Private client questionnaire: keep it out of search engines -->
+  <meta name="robots" content="noindex, nofollow">
+
   <!-- Google Fonts - Rubik -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -60,7 +62,7 @@
 
     <!-- Draft Status -->
     <div class="draft-status-bar">
-      <span id="draftStatus">הטופס נשמר אוטומטית כטיוטה מקומית</span>
+      <span><span id="draftStatus">הטופס נשמר אוטומטית כטיוטה מקומית</span> <span class="draft-privacy-note">(בדפדפן שלכם בלבד, עד לשליחה) · <a href="privacy.html" target="_blank" rel="noopener">מדיניות פרטיות</a></span></span>
       <div class="draft-actions">
         <button type="button" class="btn-text" id="downloadDraftBtn">הורד קובץ טיוטה (JSON)</button>
         <span class="divider">|</span>
@@ -166,7 +168,7 @@
                   <span class="check-icon">✓</span>
                   <div>
                     <strong>דו"ח מסלקה פנסיונית</strong>
-                    <p>מאתר המסלקה הפנסיונית swiftness.co.il (מרכז את כל החסכונות והביטוחים).</p>
+                    <p>מאתר המסלקה הפנסיונית <a href="https://www.swiftness.co.il" target="_blank" rel="noopener noreferrer">swiftness.co.il</a> (מרכז את כל החסכונות והביטוחים).</p>
                   </div>
                 </div>
               </div>
@@ -174,6 +176,20 @@
           </div>
 
 
+
+          <!-- Household type: hides everything related to partner 2 when filling alone -->
+          <fieldset class="household-fieldset" id="household_fieldset">
+            <legend>מי ממלא את השאלון?</legend>
+            <div class="form-grid">
+              <div class="form-group span-2">
+                <label for="household_type">השאלון ימולא עבור</label>
+                <select id="household_type" name="general[household_type]">
+                  <option value="couple" selected>זוג – בן/בת זוג 1 ובן/בת זוג 2</option>
+                  <option value="single">אדם יחיד – ללא בן/בת זוג</option>
+                </select>
+              </div>
+            </div>
+          </fieldset>
 
           <!-- Partner 1 -->
           <fieldset class="partner-fieldset" id="partner1_fieldset">
@@ -315,7 +331,7 @@
               <table id="circleTable" class="dynamic-table">
                 <thead>
                   <tr>
-                    <th>למי קרוב? (בן זוג 1 / 2)</th>
+                    <th>למי קרוב?</th>
                     <th>יחס קרבה</th>
                     <th>מצב כלכלי (1-10)</th>
                     <th>האם הקרוב יכול לעזור? (1-10)</th>
@@ -623,6 +639,7 @@
               <table id="mortgageTable" class="dynamic-table">
                 <thead>
                   <tr>
+                    <th>שייך לנכס</th>
                     <th>בנק מלווה</th>
                     <th>שם המסלול (פריים, קל"צ, משתנה וכו')</th>
                     <th>סכום מקורי (ש"ח)</th>
@@ -852,7 +869,7 @@
               <line x1="12" y1="16" x2="12" y2="12"></line>
               <line x1="12" y1="8" x2="12.01" y2="8"></line>
             </svg>
-            <span><strong>איך משיגים את נתוני הפנסיה?</strong>כדי לקבל תמונת מצב מלאה על כל החסכונות הפנסיוניים שלכם, היכנסו לאתר 'המסלקה הפנסיונית' (https://www.swiftness.co.il). לאחר הרשמה קצרה והזדהות מאובטחת, המערכת תפיק עבורכם דו"ח ריכוז נתונים שמרכז את כל קרנות הפנסיה, קופות הגמל וביטוחי המנהלים שלכם במקום אחד.</span>
+            <span><strong>איך משיגים את נתוני הפנסיה?</strong> כדי לקבל תמונת מצב מלאה על כל החסכונות הפנסיוניים שלכם, היכנסו לאתר 'המסלקה הפנסיונית' (<a href="https://www.swiftness.co.il" target="_blank" rel="noopener noreferrer">https://www.swiftness.co.il</a>). לאחר הרשמה קצרה והזדהות מאובטחת, המערכת תפיק עבורכם דו"ח ריכוז נתונים שמרכז את כל קרנות הפנסיה, קופות הגמל וביטוחי המנהלים שלכם במקום אחד.</span>
           </div>
 
           <!-- Combined Pensions Table -->
@@ -929,7 +946,8 @@
                     <th>סוג הביטוח (חיים, בריאות, סיעוד, תאונות, מחלות קשות)</th>
                     <th>של מי?</th>
                     <th>חברה מנהלת</th>
-                    <th>פרמיה חודשית (ש"ח) / סכום כיסוי</th>
+                    <th>פרמיה חודשית (ש"ח)</th>
+                    <th>סכום כיסוי (ש"ח)</th>
                     <th>שם סוכן הביטוח</th>
                     <th>סוג הכיסוי (משלים קופת חולים / פרטי לחלוטין)</th>
                     <th class="col-actions">פעולות</th>
@@ -1199,6 +1217,27 @@
               </div>
             </div>
           </fieldset>
+
+          <!-- Consent to privacy policy (required before sending) -->
+          <fieldset class="consent-fieldset" id="consent_fieldset">
+            <legend>הסכמה למסירת המידע</legend>
+            <div class="consent-row">
+              <input type="checkbox" id="consent_privacy" name="consent[privacy]" class="custom-checkbox" required>
+              <label for="consent_privacy">
+                קראתי ואני מסכים/ה ל<a href="privacy.html" target="_blank" rel="noopener">מדיניות הפרטיות</a>,
+                ומאשר/ת למסור את הנתונים שמילאתי ליועצים הפיננסיים לצורך הכנת תוכנית פיננסית עבורי
+                (ועבור בן/בת הזוג, ככל שמולאו פרטיו בידיעתו/ה). <span class="required">*</span>
+              </label>
+            </div>
+            <p class="consent-note">אין צורך למסור מספרי תעודת זהות, מספרי כרטיס אשראי מלאים או סיסמאות – ואנחנו לא מבקשים אותם בשום שלב.</p>
+            <div id="turnstileContainer" class="turnstile-container hidden"></div>
+          </fieldset>
+
+          <!-- Honeypot: invisible to people, bots tend to fill it in -->
+          <div class="hp-field" aria-hidden="true">
+            <label for="hp_website">אל תמלאו שדה זה</label>
+            <input type="text" id="hp_website" name="hp_website" tabindex="-1" autocomplete="off">
+          </div>
         </div>
       </section>
 
@@ -1256,12 +1295,17 @@
           שאלון זה מקיף וכולל טבלאות נתונים מפורטות ומסמכים פיננסיים.<br>
           למילוי מהיר, נוח ומדויק – <strong>מומלץ מאוד לפתוח אותו במחשב</strong>.
         </p>
+        <p class="mobile-rec-desc mobile-rec-sub">שלחו לעצמכם את הקישור, ופתחו אותו כשתהיו ליד המחשב:</p>
       </div>
       <div class="mobile-rec-actions">
         <a href="#" id="sendSelfWhatsappBtn" class="btn-primary btn-wa-share" target="_blank">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.42 9.863-9.864.001-2.63-1.023-5.101-2.884-6.963C16.59 1.96 14.118.937 11.487.937 6.05 1.937 1.628 6.042 1.626 11.486c-.001 1.683.447 3.323 1.3 4.773L1.935 21.8l5.712-1.498zm11.783-6.883c-.302-.15-.1.087-.69-.377-.12-.09-.242-.18-.363-.27-.24-.18-.46-.225-.66-.03-.2.195-.78.78-.96.975-.18.195-.36.225-.66.075-.3-.15-1.265-.465-2.41-1.485-.89-.795-1.49-1.785-1.665-2.085-.175-.3-.02-.465.13-.615.135-.135.3-.35.45-.525.15-.175.2-.3.3-.5.1-.2.05-.375-.025-.525-.075-.15-.675-1.625-.925-2.225-.244-.589-.5-.589-.69-.597-.18-.008-.39-.01-.6-.01-.21 0-.555.08-.846.4-.29.32-1.11 1.08-1.11 2.63s1.13 3.05 1.285 3.26c.155.21 2.22 3.39 5.375 4.75.75.32 1.33.51 1.79.66.756.24 1.444.205 1.988.124.607-.09 1.847-.755 2.11-1.485.262-.73.262-1.355.184-1.485-.078-.13-.284-.21-.586-.36z"/></svg>
           שלח קישור לוואטסאפ (לפתיחה במחשב)
         </a>
+        <div class="mobile-rec-secondary-actions">
+          <a href="#" id="sendSelfEmailBtn" class="btn-secondary mobile-rec-mini">שלח לעצמי במייל</a>
+          <button type="button" id="copyLinkBtn" class="btn-secondary mobile-rec-mini">העתק קישור</button>
+        </div>
         <button type="button" id="continueOnMobileBtn" class="btn-text-modal">
           המשך במילוי מהטלפון בכל זאת
         </button>
@@ -1287,10 +1331,10 @@
       <div class="success-actions-container">
         <!-- Direct WhatsApp Notice Block -->
         <div class="success-action-card wa-action-card">
-          <div class="card-badge">שלב מומלץ</div>
+          <div class="card-badge">לא חובה</div>
           <div class="card-text">
-            <h3>עדכנו את היועץ בוואטסאפ שסיימתם</h3>
-            <p>הנתונים כבר נשלחו למערכת! לחצו על הכפתור כדי לשלוח ליועץ הודעת אישור מהירה (ללא צורך בצירוף קבצים):</p>
+            <h3>רוצים להגיד לנו שלום בוואטסאפ?</h3>
+            <p>הנתונים כבר הגיעו אלינו ואנחנו מעודכנים אוטומטית – אין צורך לעשות דבר נוסף. אם בכל זאת בא לכם, אפשר לשלוח הודעה קצרה:</p>
           </div>
           <div class="wa-buttons-group">
             <a href="#" target="_blank" class="btn-wa-direct" id="successWhatsappBtn1">
@@ -1332,7 +1376,30 @@
     </div>
   </div>
 
+  <!-- Submission failed: the data is NOT lost, offer retry / backup / contact -->
+  <div id="submitErrorModal" class="modal hidden" role="alertdialog" aria-labelledby="submitErrorTitle">
+    <div class="modal-content submit-error-content">
+      <div class="modal-header submit-error-header">
+        <div class="error-icon-wrapper">!</div>
+        <h2 id="submitErrorTitle">השליחה לא הצליחה</h2>
+        <p class="success-subtitle">
+          לא נורא – <strong>כל מה שמילאתם שמור</strong> בדפדפן ולא אבד. ייתכן שיש תקלה זמנית באינטרנט או אצלנו.
+        </p>
+      </div>
+      <div class="success-actions-container">
+        <button type="button" class="btn-primary" id="retrySubmitBtn">נסו לשלוח שוב</button>
+        <button type="button" class="btn-secondary" id="errorDownloadJsonBtn">הורדת קובץ גיבוי (לשליחה ליועץ)</button>
+        <a href="#" target="_blank" rel="noopener" class="btn-secondary" id="errorWhatsappBtn">פנו אלינו בוואטסאפ</a>
+      </div>
+      <div class="modal-footer success-modal-footer">
+        <span class="submit-error-detail" id="submitErrorDetail"></span>
+        <button type="button" class="btn-text-sub" id="closeSubmitErrorBtn">סגירה</button>
+      </div>
+    </div>
+  </div>
+
   <!-- JS Code -->
+  <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
