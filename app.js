@@ -984,7 +984,7 @@ document.addEventListener('DOMContentLoaded', () => {
     { key: 'leisure',    icon: '🌴', title: 'פנאי, בילויים וחופשות',  hint: 'חופשות, בילויים, תחביבים ומנויי ספורט' },
     { key: 'clothing',   icon: '👗', title: 'ביגוד וטיפוח',           hint: 'ביגוד והנעלה, מספרה, קוסמטיקה והיגיינה' },
     { key: 'savings',    icon: '💰', title: 'חיסכון והוצאות פיננסיות', hint: 'חיסכון והשקעות, ייעוץ והנהלת חשבונות' },
-    { key: 'other',      icon: '📦', title: 'הוצאות נוספות',          hint: 'מתנות, תרומות, חיות מחמד, והוצאות שלא מצאתם להן מקום' }
+    { key: 'other',      icon: '📦', title: 'הוצאות נוספות',          hint: 'מתנות, תרומות, חיות מחמד, BIT ופייבוקס (רק תשלומים שלא נכללו בסעיפים אחרים), והוצאות שלא מצאתם להן מקום' }
   ];
 
   const EXPENSE_ITEMS = [
@@ -1056,6 +1056,8 @@ document.addEventListener('DOMContentLoaded', () => {
     { id: 'family_support', label: 'תמיכה בבני המשפחה', group: 'other' },
     { id: 'donations', label: 'תרומות וצדקה', group: 'other' },
     { id: 'pets', label: 'חיות מחמד', group: 'other' },
+    { id: 'bit', label: 'BIT', group: 'other' },
+    { id: 'paybox', label: 'פייבוקס', group: 'other' },
     { id: 'cigarettes', label: 'סיגריות', group: 'other' },
     { id: 'untracked_cash', label: 'מזומן ללא מעקב', group: 'other' }
   ];
