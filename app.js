@@ -423,6 +423,36 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // A property's mortgage totals (original / remaining) are the sum of its mortgage tracks (step 3, second table):
+  // once tracks are linked to a property and have amounts, the property fields fill themselves and lock.
+  function syncPropertyMortgageTotals() {
+    const tracks = Array.from(document.querySelectorAll('#mortgageTable tbody tr'));
+    document.querySelectorAll('#realEstateTable tbody tr').forEach(prop => {
+      const id = prop.dataset.rowId;
+      const mine = id ? tracks.filter(t => t.querySelector('.cell-property-id')?.value === id) : [];
+      [['.cell-mortgage-orig', '.cell-orig'], ['.cell-mortgage-rem', '.cell-remaining']].forEach(([propSel, trackSel]) => {
+        const input = prop.querySelector(propSel);
+        if (!input) return;
+        const vals = mine.map(t => String(t.querySelector(trackSel)?.value || '').trim()).filter(v => v !== '');
+        const locked = vals.length > 0;
+        if (locked) {
+          const sum = vals.reduce((a, v) => a + parseNumber(v), 0);
+          const v = String(Math.round(sum * 100) / 100);
+          input.value = input.type === 'number' ? v : formatNumberWithCommas(v);
+        }
+        input.readOnly = locked;
+        input.classList.toggle('input-readonly', locked);
+        input.title = locked ? 'סכום המסלולים של הנכס (מהטבלה "פירוט משכנתאות" למטה)' : '';
+      });
+    });
+  }
+  document.addEventListener('input', (e) => {
+    if (e.target.closest && e.target.closest('#mortgageTable tbody tr')) syncPropertyMortgageTotals();
+  });
+  document.addEventListener('change', (e) => {
+    if (e.target.closest && e.target.closest('#mortgageTable tbody tr')) syncPropertyMortgageTotals();
+  });
+
   // Short label per column, used on phones where each table row becomes a card.
   function labelTableCells(row) {
     const table = row.closest('table');
@@ -1181,54 +1211,82 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
 
-  // --- Step 2 <-> Step 4 link: insurance premiums are typed ONCE, and appear in both places -----------------
-  // Expense row  <->  insurance row (type + coverage).  Rules (the last edit always wins):
-  //   * no insurance row with a premium  -> typing the amount in step 2 creates / fills the row in step 4
-  //   * exactly one row                   -> both sides mirror each other
-  //   * several rows of the same kind      -> step 2 shows their sum and is locked (edit in step 4)
-  // "Accidents" and "critical illness" have no expense row, so they are not linked.
-  const INSURANCE_LINK_SPEC = {
-    life_insurance:       { type: 'חיים' },
-    health_supplementary: { type: 'בריאות', cov: 'supplementary' },
-    health_private:       { type: 'בריאות', cov: 'private' },
-    disability_insurance: { type: 'אובדן כושר עבודה' },
-    ltc_insurance:        { type: 'סיעוד' }
+  // --- Linked fields: a figure that appears in two steps is typed ONCE ------------------------------------------
+  // Expense row (step 2)  <->  rows of a table in step 3 / 4 that hold the same monthly amount:
+  //   insurances (step 4)   -> life / health / disability / long-term-care rows
+  //   mortgage tracks (3)   -> "משכנתא"
+  //   loans (step 3)        -> "הלוואות" (loans for a car -> "ליסינג או הלוואת רכב")
+  // Rules (the last edit always wins):
+  //   * no source row with an amount -> typing the amount in step 2 creates / fills a row in the other step
+  //   * exactly one row               -> both sides mirror each other
+  //   * several rows of the same kind -> step 2 shows their sum and is locked (edit it where the rows are)
+  const LINK_SOURCES = {
+    insurancesTable: {
+      amount: '.cell-premium', stepLabel: 'שלב 4', unit: 'פוליסות',
+      keep: ['.cell-company', '.cell-sum-insured', '.cell-agent'],
+      triggers: '.cell-premium, .cell-type, .cell-cov-type',
+      categoryOf: (row) => {
+        const t = row.querySelector('.cell-type')?.value;
+        if (t === 'חיים') return 'life_insurance';
+        if (t === 'סיעוד') return 'ltc_insurance';
+        if (t === 'אובדן כושר עבודה') return 'disability_insurance';
+        if (t === 'בריאות') return row.querySelector('.cell-cov-type')?.value === 'supplementary' ? 'health_supplementary' : 'health_private';
+        return null; // accidents / critical illness have no expense row
+      }
+    },
+    mortgageTable: {
+      amount: '.cell-monthly', stepLabel: 'שלב 3', unit: 'מסלולים',
+      keep: ['.cell-bank', '.cell-track', '.cell-orig', '.cell-remaining', '.cell-rate', '.cell-end-date'],
+      triggers: '.cell-monthly',
+      categoryOf: () => 'mortgage'
+    },
+    liabilitiesTable: {
+      amount: '.cell-monthly', stepLabel: 'שלב 3', unit: 'הלוואות',
+      keep: ['.cell-lender', '.cell-orig', '.cell-current', '.cell-rate', '.cell-end'],
+      triggers: '.cell-monthly, .cell-purpose',
+      categoryOf: (row) => (String(row.querySelector('.cell-purpose')?.value || '').trim() === 'רכב' ? 'car_lease' : 'loans')
+    }
   };
-  const INSURANCE_LINK_IDS = Object.keys(INSURANCE_LINK_SPEC);
-  let insuranceLinkBusy = false;
-  let insuranceLinkPrev = null;
+  const EXPENSE_LINKS = {
+    life_insurance:       { table: 'insurancesTable', init: { type: 'חיים', cov_type: 'private' } },
+    health_supplementary: { table: 'insurancesTable', init: { type: 'בריאות', cov_type: 'supplementary' } },
+    health_private:       { table: 'insurancesTable', init: { type: 'בריאות', cov_type: 'private' } },
+    disability_insurance: { table: 'insurancesTable', init: { type: 'אובדן כושר עבודה', cov_type: 'private' } },
+    ltc_insurance:        { table: 'insurancesTable', init: { type: 'סיעוד', cov_type: 'private' } },
+    mortgage:             { table: 'mortgageTable',   init: {} },
+    loans:                { table: 'liabilitiesTable', init: {} },
+    car_lease:            { table: 'liabilitiesTable', init: { purpose: 'רכב', purpose_key: 'רכב' } }
+  };
+  const LINK_IDS = Object.keys(EXPENSE_LINKS);
+  let linkBusy = false;
+  let linkPrev = null;
   const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
-  function insuranceRowCategory(row) {
-    const t = row.querySelector('.cell-type')?.value;
-    if (t === 'חיים') return 'life_insurance';
-    if (t === 'סיעוד') return 'ltc_insurance';
-    if (t === 'אובדן כושר עבודה') return 'disability_insurance';
-    if (t === 'בריאות') return row.querySelector('.cell-cov-type')?.value === 'supplementary' ? 'health_supplementary' : 'health_private';
-    return null; // accidents / critical illness: no expense row
-  }
-  function insuranceLinkState() {
+  function linkState() {
     const st = {};
-    INSURANCE_LINK_IDS.forEach(id => { st[id] = { rows: [], filled: [], empty: [], count: 0, sum: 0 }; });
-    document.querySelectorAll('#insurancesTable tbody tr').forEach(r => {
-      const id = insuranceRowCategory(r);
-      if (!id) return;
-      const prem = parseNumber(r.querySelector('.cell-premium')?.value);
-      st[id].rows.push(r);
-      if (prem > 0) { st[id].filled.push(r); st[id].count++; st[id].sum += prem; } else { st[id].empty.push(r); }
+    LINK_IDS.forEach(id => { st[id] = { rows: [], filled: [], empty: [], count: 0, sum: 0 }; });
+    Object.keys(LINK_SOURCES).forEach(tableId => {
+      const src = LINK_SOURCES[tableId];
+      document.querySelectorAll(`#${tableId} tbody tr`).forEach(r => {
+        const id = src.categoryOf(r);
+        if (!id || !st[id]) return;
+        const amt = parseNumber(r.querySelector(src.amount)?.value);
+        st[id].rows.push(r);
+        if (amt > 0) { st[id].filled.push(r); st[id].count++; st[id].sum += amt; } else { st[id].empty.push(r); }
+      });
     });
-    INSURANCE_LINK_IDS.forEach(id => { st[id].sum = round2(st[id].sum); });
+    LINK_IDS.forEach(id => { st[id].sum = round2(st[id].sum); });
     return st;
   }
   function expenseRowById(id) {
     return document.querySelector(`#expensesTable tbody tr.exp-row[data-category-id="${id}"]`);
   }
-  function setInsurancePremium(row, v) {
-    const input = row.querySelector('.cell-premium');
+  function setSourceAmount(row, tableId, v) {
+    const input = row.querySelector(LINK_SOURCES[tableId].amount);
     if (input) input.value = v === '' ? '' : formatNumberWithCommas(String(round2(v)));
   }
-  function insuranceRowIsOtherwiseEmpty(row) {
-    return ['.cell-company', '.cell-sum-insured', '.cell-agent'].every(c => String(row.querySelector(c)?.value || '').trim() === '');
+  function sourceRowIsOtherwiseEmpty(row, tableId) {
+    return LINK_SOURCES[tableId].keep.every(c => String(row.querySelector(c)?.value || '').trim() === '');
   }
   // Step 2 side: show an amount as a fixed monthly standing order (months are stashed, nothing is lost)
   function setExpenseFixedAmount(row, amount) {
@@ -1255,16 +1313,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeSel) typeSel.value = 'variable';
     syncExpenseRow(row);
   }
-  function createOrFillInsuranceRow(id, st, amount) {
-    const spec = INSURANCE_LINK_SPEC[id];
+  function createOrFillSourceRow(id, st, amount) {
+    const link = EXPENSE_LINKS[id];
     const target = st[id].empty[0];
-    if (target) { setInsurancePremium(target, amount); return; }
-    addTableRow('insurancesTable', { type: spec.type, cov_type: spec.cov || 'private', premium: String(round2(amount)) });
+    if (target) { setSourceAmount(target, link.table, amount); return; }
+    const key = LINK_SOURCES[link.table].amount.replace('.cell-', '');
+    addTableRow(link.table, Object.assign({}, link.init, { [key]: String(round2(amount)) }));
   }
-  function refreshInsuranceLinkUI(st) {
-    INSURANCE_LINK_IDS.forEach(id => {
+  function refreshLinkUI(st) {
+    LINK_IDS.forEach(id => {
       const E = expenseRowById(id);
       if (!E) return;
+      const src = LINK_SOURCES[EXPENSE_LINKS[id].table];
       const n = st[id].count;
       const locked = n >= 2;
       const fx = E.querySelector('.cell-fixed-monthly');
@@ -1282,27 +1342,29 @@ document.addEventListener('DOMContentLoaded', () => {
           E.querySelector('.exp-name')?.after(note);
         }
         note.textContent = locked
-          ? `🔗 סכום של ${n} פוליסות משלב 4 – לשינוי היכנסו לשלב 4`
-          : '🔗 מחובר לביטוחים בשלב 4 – שינוי כאן יתעדכן גם שם';
+          ? `🔗 סכום של ${n} ${src.unit} מ${src.stepLabel} – לשינוי היכנסו ל${src.stepLabel}`
+          : `🔗 מחובר ל${src.stepLabel} – שינוי כאן יתעדכן גם שם`;
       } else if (note) {
         note.remove();
       }
     });
   }
-  // source: 'ins' (step 4 changed) | 'exp' (an expense row changed, cid = its category) | 'init' (after load: fill the missing side only)
-  function reconcileInsuranceLinks(source, cid) {
-    if (insuranceLinkBusy) return;
-    insuranceLinkBusy = true;
+  // source: 'src' (the step 3/4 table changed) | 'exp' (an expense row changed, cid = its category)
+  //         | 'init' (after a load: fill the missing side only, never overwrite)
+  function reconcileLinks(source, cid) {
+    if (linkBusy) return;
+    linkBusy = true;
     try {
-      const st = insuranceLinkState();
-      const prev = insuranceLinkPrev || {};
-      INSURANCE_LINK_IDS.forEach(id => {
+      const st = linkState();
+      const prev = linkPrev || {};
+      LINK_IDS.forEach(id => {
         if (source === 'exp' && id !== cid) return;
         const E = expenseRowById(id);
         if (!E) return;
+        const table = EXPENSE_LINKS[id].table;
         const s = st[id];
         const avg = round2(expenseRowAvg(E));
-        if (source === 'ins') {
+        if (source === 'src') {
           if (s.count >= 1) {
             if (!(expenseRowIsFixed(E) && Math.abs(avg - s.sum) < 0.005)) setExpenseFixedAmount(E, s.sum);
           } else if (prev[id] && prev[id].count >= 1 && Math.abs(avg - prev[id].sum) < 0.005) {
@@ -1310,44 +1372,45 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         } else if (source === 'exp') {
           if (s.count === 0) {
-            if (avg > 0) createOrFillInsuranceRow(id, st, avg);
+            if (avg > 0) createOrFillSourceRow(id, st, avg);
           } else if (s.count === 1) {
             const r = s.filled[0];
-            if (avg > 0) setInsurancePremium(r, avg);
-            else { setInsurancePremium(r, ''); if (insuranceRowIsOtherwiseEmpty(r)) r.remove(); }
+            if (avg > 0) setSourceAmount(r, table, avg);
+            else { setSourceAmount(r, table, ''); if (sourceRowIsOtherwiseEmpty(r, table)) r.remove(); }
           } else {
-            setExpenseFixedAmount(E, s.sum); // locked: always the sum of the policies
+            setExpenseFixedAmount(E, s.sum); // locked: always the sum of the rows
           }
         } else { // init
           if (s.count >= 1 && avg === 0) setExpenseFixedAmount(E, s.sum);
-          else if (s.count === 0 && avg > 0) createOrFillInsuranceRow(id, st, avg);
+          else if (s.count === 0 && avg > 0) createOrFillSourceRow(id, st, avg);
         }
       });
-      const after = insuranceLinkState();
-      insuranceLinkPrev = {};
-      INSURANCE_LINK_IDS.forEach(id => { insuranceLinkPrev[id] = { count: after[id].count, sum: after[id].sum }; });
-      refreshInsuranceLinkUI(after);
+      const after = linkState();
+      linkPrev = {};
+      LINK_IDS.forEach(id => { linkPrev[id] = { count: after[id].count, sum: after[id].sum }; });
+      refreshLinkUI(after);
     } finally {
-      insuranceLinkBusy = false;
+      linkBusy = false;
     }
     updateComputedExpensesTotal();
     if (source !== 'init') saveDraft();
   }
-  // One delegated listener for both tables
+  // One delegated listener for all the linked tables
   ['input', 'change'].forEach(evt => {
     document.addEventListener(evt, (e) => {
       const t = e.target;
-      if (!t || !t.closest || insuranceLinkBusy) return;
-      const insRow = t.closest('#insurancesTable tbody tr');
-      if (insRow) {
-        if (t.matches('.cell-premium, .cell-type, .cell-cov-type')) reconcileInsuranceLinks('ins');
+      if (!t || !t.closest || linkBusy) return;
+      const srcRow = t.closest('#insurancesTable tbody tr, #mortgageTable tbody tr, #liabilitiesTable tbody tr');
+      if (srcRow) {
+        const tableId = srcRow.closest('table').id;
+        if (t.matches(LINK_SOURCES[tableId].triggers)) reconcileLinks('src');
         return;
       }
       const expRow = t.closest('#expensesTable tbody tr.exp-row');
-      if (expRow && INSURANCE_LINK_SPEC[expRow.dataset.categoryId]
+      if (expRow && EXPENSE_LINKS[expRow.dataset.categoryId]
           && t.matches('.cell-month1, .cell-month2, .cell-month3, .cell-fixed-monthly, .cell-is-fixed, .cell-expense-type')) {
         // the row's own handlers (fixed / type) run first, then we mirror
-        setTimeout(() => reconcileInsuranceLinks('exp', expRow.dataset.categoryId), 0);
+        setTimeout(() => reconcileLinks('exp', expRow.dataset.categoryId), 0);
       }
     });
   });
@@ -1514,9 +1577,10 @@ document.addEventListener('DOMContentLoaded', () => {
       row.style.transform = 'scale(0.95)';
       row.style.opacity = '0';
       setTimeout(() => {
-        const wasInsurance = !!row.closest('#insurancesTable');
+        const wasLinked = !!row.closest('#insurancesTable, #mortgageTable, #liabilitiesTable');
         row.remove();
-        if (wasInsurance) reconcileInsuranceLinks('ins');
+        if (wasLinked) reconcileLinks('src');
+        syncPropertyMortgageTotals();
         refreshPropertyOptions();
         saveDraft();
         updateLiveFinancialKPIs();
@@ -1841,7 +1905,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         toggleConditionalFields();
         updateComputedExpensesTotal();
-        reconcileInsuranceLinks('init');
+        reconcileLinks('init');
+      syncPropertyMortgageTotals();
         updateLiveFinancialKPIs();
         collectQualityFlags();
 
@@ -2212,7 +2277,36 @@ document.addEventListener('DOMContentLoaded', () => {
     return row;
   }
 
+  // Step 4 toggles that repeat an answer from steps 1-2 tick themselves (and untick only if they ticked themselves)
+  const toggleSync = { selfEmployed: false, singleParent: false, secondMarriage: false };
+  function autoToggle(key, checkbox, cond) {
+    if (!checkbox) return;
+    if (cond && !toggleSync[key]) {
+      if (!checkbox.checked) { checkbox.checked = true; checkbox.dataset.auto = '1'; }
+    } else if (!cond && toggleSync[key] && checkbox.dataset.auto === '1') {
+      checkbox.checked = false;
+      delete checkbox.dataset.auto;
+    }
+    toggleSync[key] = cond;
+  }
+  function syncSpecialToggles() {
+    const emp2 = document.getElementById('p2_employment_type');
+    const selfEmp = p1EmploymentTypeSelect?.value === 'self_employed' || (hasPartner() && emp2?.value === 'self_employed');
+    autoToggle('selfEmployed', toggleSelfEmployedCheckbox, !!selfEmp);
+    autoToggle('singleParent', toggleSingleParentCheckbox, document.getElementById('marital_status')?.value === 'single_parent');
+    autoToggle('secondMarriage', toggleSecondMarriageCheckbox, document.getElementById('previous_marriage')?.value === 'yes');
+  }
+  [toggleSelfEmployedCheckbox, toggleSingleParentCheckbox, toggleSecondMarriageCheckbox].forEach(cb => {
+    cb?.addEventListener('click', () => { delete cb.dataset.auto; });
+  });
+  // second marriage is two-way: ticking it answers the question in step 1 as well
+  toggleSecondMarriageCheckbox?.addEventListener('change', () => {
+    const prevSel = document.getElementById('previous_marriage');
+    if (prevSel) { prevSel.value = toggleSecondMarriageCheckbox.checked ? 'yes' : 'no'; toggleSync.secondMarriage = prevSel.value === 'yes'; }
+  });
+
   function toggleConditionalFields() {
+    syncSpecialToggles();
     const partnerOn = hasPartner();
     ['partner2_fieldset', 'p2_income_fieldset'].forEach(id => {
       const el = document.getElementById(id);
@@ -2522,7 +2616,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       toggleConditionalFields();
       updateComputedExpensesTotal();
-      reconcileInsuranceLinks('init');
+      reconcileLinks('init');
+      syncPropertyMortgageTotals();
       updateLiveFinancialKPIs();
 
       const savedVisited = localStorage.getItem('financial_questionnaire_visited_steps');
@@ -3415,7 +3510,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Check conditional visibility on load
   toggleConditionalFields();
   updateComputedExpensesTotal();
-  reconcileInsuranceLinks('init');
+  reconcileLinks('init');
+      syncPropertyMortgageTotals();
   updateLiveFinancialKPIs();
 
   // Validate all steps to color indicators on start
