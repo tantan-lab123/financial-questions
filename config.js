@@ -8,7 +8,7 @@ window.APP_CONFIG = {
 
   // Version of the JSON structure that is sent. Bump it when fields change,
   // so the receiving side (n8n / database) knows how to read old and new files.
-  SCHEMA_VERSION: '2.0',
+  SCHEMA_VERSION: '2.1',
 
   // Version of privacy.html that the client agreed to. Bump it when the policy changes.
   POLICY_VERSION: '2026-10-09',
