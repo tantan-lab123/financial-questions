@@ -524,7 +524,7 @@ document.addEventListener('DOMContentLoaded', () => {
       monthly_income_partner2: r(p2Income),
       monthly_additional_income: r(additionalIncome),
       monthly_expenses: r2(monthlyExpenses),
-      monthly_expenses_fixed: r2(expTotals.byType.fixed_annual),
+      monthly_expenses_fixed: 0, // kept for compatibility (the separate "fixed" type was merged into standing orders)
       monthly_expenses_variable: r2(expTotals.byType.variable),
       monthly_expenses_standing_order: r2(expTotals.byType.standing_order),
       free_cashflow: r2(r(monthlyIncome) - monthlyExpenses),
@@ -951,8 +951,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <td class="col-exp-type">
         <select class="cell-expense-type" aria-label="סוג הוצאה">
           <option value="variable">הוצאה משתנה</option>
-          <option value="standing_order">הוראת קבע</option>
-          <option value="fixed_annual">הוצאה קבועה שנתית</option>
+          <option value="standing_order">הוראת קבע / קבועה</option>
         </select>
       </td>
     `
@@ -977,8 +976,8 @@ document.addEventListener('DOMContentLoaded', () => {
     { key: 'transport',  icon: '🚗', title: 'תחבורה ורכב',            hint: 'דלק, ביטוח וטיפולים לרכב, תחבורה ציבורית' },
     { key: 'food',       icon: '🛒', title: 'מזון וקניות',            hint: 'קניות לבית, מסעדות ומשלוחים' },
     { key: 'kids',       icon: '👶', title: 'ילדים וחינוך',           hint: 'מסגרות, חוגים וכל הוצאה שוטפת על הילדים (אין ילדים? אפשר לדלג)' },
-    { key: 'health',     icon: '🩺', title: 'בריאות ורפואה',          hint: 'ביטוחי בריאות, תרופות, רופאים וטיפולים' },
-    { key: 'insurance',  icon: '🛡️', title: 'ביטוחים',                hint: 'ביטוחי חיים, אובדן כושר עבודה וסיעוד (ביטוח רכב, דירה ובריאות נמצאים בנושאים שלהם)' },
+    { key: 'health',     icon: '🩺', title: 'בריאות ורפואה',          hint: 'תרופות, רופאים פרטיים, שיניים וטיפולים' },
+    { key: 'insurance',  icon: '🛡️', title: 'ביטוחים',                hint: 'ביטוחי חיים, בריאות (משלים ופרטי), אובדן כושר עבודה וסיעוד (ביטוח רכב ודירה נמצאים בנושאים שלהם)' },
     { key: 'tech',       icon: '📱', title: 'תקשורת וטכנולוגיה',      hint: 'טלפון, אינטרנט, טלוויזיה, מנויים וציוד אלקטרוני' },
     { key: 'debts',      icon: '💳', title: 'הלוואות והתחייבויות',    hint: 'החזרים חודשיים על הלוואות, חובות וריבית (משכנתא נמצאת בדיור)' },
     { key: 'leisure',    icon: '🌴', title: 'פנאי, בילויים וחופשות',  hint: 'חופשות, בילויים, תחביבים ומנויי ספורט' },
@@ -1017,13 +1016,13 @@ document.addEventListener('DOMContentLoaded', () => {
     { id: 'kids_clothing_toys', label: 'ביגוד, הנעלה, צעצועים וציוד לילדים', group: 'kids' },
     { id: 'pocket_money', label: 'דמי כיס', group: 'kids' },
     // health
-    { id: 'health_supplementary', label: 'ביטוח בריאות משלים', group: 'health' },
-    { id: 'health_private', label: 'ביטוח בריאות פרטי', group: 'health' },
     { id: 'medical', label: 'הוצאות ריפוי (תרופות, רופאים, משקפיים)', group: 'health' },
     { id: 'dental', label: 'טיפולי שיניים', group: 'health' },
     { id: 'therapy', label: 'טיפולים רגשיים ופרא-רפואיים', group: 'health' },
     // insurance
     { id: 'life_insurance', label: 'ביטוח חיים', group: 'insurance' },
+    { id: 'health_supplementary', label: 'ביטוח בריאות משלים', group: 'insurance' },
+    { id: 'health_private', label: 'ביטוח בריאות פרטי', group: 'insurance' },
     { id: 'disability_insurance', label: 'ביטוח אובדן כושר עבודה', group: 'insurance' },
     { id: 'ltc_insurance', label: 'ביטוח סיעודי', group: 'insurance' },
     // tech
@@ -1077,7 +1076,9 @@ document.addEventListener('DOMContentLoaded', () => {
   EXPENSE_GROUPS.forEach(g => { EXPENSE_GROUP_BY_KEY[g.key] = g; });
   // Old 7-group keys (before the 12-group structure) -> new group
   const LEGACY_GROUP_MAP = { housing: 'housing', transport: 'transport', kids: 'kids', food: 'food', leisure: 'leisure', finance: 'savings', other: 'other' };
-  const EXPENSE_TYPES = ['variable', 'standing_order', 'fixed_annual'];
+  const EXPENSE_TYPES = ['variable', 'standing_order'];
+  // Older drafts / files had a third type ("fixed_annual"); it behaves exactly like a standing order
+  const normalizeExpenseType = (v) => (v === 'fixed_annual' ? 'standing_order' : v);
 
   // Finds the fixed category an old draft / file row belongs to. Unknown (client-typed) rows -> null.
   function resolveExpenseItem(item) {
@@ -1091,7 +1092,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Per-row calculation: the single source of truth for expenses -------------------------------------------
   function expenseRowType(row) {
-    const v = row.querySelector('.cell-expense-type')?.value;
+    const v = normalizeExpenseType(row.querySelector('.cell-expense-type')?.value);
     return EXPENSE_TYPES.includes(v) ? v : 'variable';
   }
   function expenseRowIsFixed(row) {
@@ -1115,7 +1116,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return ['.cell-month1', '.cell-month2', '.cell-month3'].some(c => String(row.querySelector(c)?.value || '').trim() !== '');
   }
   function computeExpenseTotals() {
-    const out = { total: 0, byType: { variable: 0, standing_order: 0, fixed_annual: 0 }, byGroup: {}, months: [0, 0, 0] };
+    const out = { total: 0, byType: { variable: 0, standing_order: 0 }, byGroup: {}, months: [0, 0, 0] };
     document.querySelectorAll('#expensesTable tbody tr.exp-row').forEach(row => {
       const m = expenseRowMonths(row);
       const avg = (m[0] + m[1] + m[2]) / 3;
@@ -1282,7 +1283,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (meta) {
         ['month1', 'month2', 'month3'].forEach(m => setVal(`.cell-${m}`, item[m]));
         setVal('.cell-notes', item.notes);
-        const type = EXPENSE_TYPES.includes(item.expense_type) ? item.expense_type : 'variable';
+        const savedType = normalizeExpenseType(item.expense_type);
+        const type = EXPENSE_TYPES.includes(savedType) ? savedType : 'variable';
         const typeSel = target.querySelector('.cell-expense-type');
         if (typeSel) typeSel.value = type;
         const chk = target.querySelector('.cell-is-fixed');
@@ -1454,7 +1456,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Overview cards
     setText('expKpiAvg', `${fmtMoney(total)} ₪`);
-    setText('expKpiFixed', `${fmtMoney(totals.byType.fixed_annual)} ₪`);
     setText('expKpiVariable', `${fmtMoney(totals.byType.variable)} ₪`);
     setText('expKpiStanding', `${fmtMoney(totals.byType.standing_order)} ₪`);
 
