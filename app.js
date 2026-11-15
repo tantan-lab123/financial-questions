@@ -1059,15 +1059,12 @@ document.addEventListener('DOMContentLoaded', () => {
     { id: 'cigarettes', label: 'סיגריות', group: 'other' },
     { id: 'untracked_cash', label: 'מזומן ללא מעקב', group: 'other' }
   ];
-  // Every group ends with a fixed "other" row (name locked, free-text notes)
-  EXPENSE_GROUPS.forEach(g => {
-    const isLast = g.key === 'other';
-    EXPENSE_ITEMS.push({
-      id: `other_${g.key}`,
-      label: isLast ? 'אחר – לא בטוחים באיזה נושא? רשמו כאן (פרטו בהערות)' : 'אחר (פרטו בהערות)',
-      group: g.key,
-      isOther: true
-    });
+  // One fixed "other" row, at the end of the last group, for anything the client cannot place (details go in the notes)
+  EXPENSE_ITEMS.push({
+    id: 'other_other',
+    label: 'אחר – לא בטוחים באיזה נושא? רשמו כאן (פרטו בהערות)',
+    group: 'other',
+    isOther: true
   });
   // Items ordered group by group (the table is rendered in this order)
   const EXPENSE_ITEMS_ORDERED = [];
@@ -1088,17 +1085,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (id && EXPENSE_ITEM_BY_ID[id]) return EXPENSE_ITEM_BY_ID[id];
     const byLabel = EXPENSE_ITEMS.find(i => !i.isOther && i.label === label);
     return byLabel || null;
-  }
-
-  // Which "other" row receives a row that no longer exists as a category?
-  function guessExpenseGroup(item) {
-    const name = String(item.category || '').trim();
-    if (name.length >= 2) {
-      const hit = EXPENSE_ITEMS.find(i => !i.isOther && (i.label.includes(name) || name.includes(i.label)));
-      if (hit) return hit.group;
-    }
-    if (item.category_group && EXPENSE_GROUP_BY_KEY[item.category_group] && item.category_id !== 'custom') return item.category_group;
-    return LEGACY_GROUP_MAP[item.category_group] || 'other';
   }
 
   // --- Per-row calculation: the single source of truth for expenses -------------------------------------------
@@ -1280,11 +1266,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 3) Fill amounts into the fixed categories. A row whose category no longer exists goes into the
-    //    "other" row of the closest group (amounts are added, the old name goes into the notes) - nothing is lost.
+    //    general "other" row (amounts are added, the old name goes into the notes) - nothing is lost.
     expensesArray.forEach(item => {
       if (!item || (!item.category && !item.category_id)) return;
       const meta = resolveExpenseItem(item);
-      const target = meta ? rowById[meta.id] : rowById[`other_${guessExpenseGroup(item)}`];
+      const target = meta ? rowById[meta.id] : rowById.other_other;
       if (!target) return;
       const setVal = (selector, value) => {
         const input = target.querySelector(selector);
