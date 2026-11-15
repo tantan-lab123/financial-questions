@@ -2654,3 +2654,8 @@ select { max-width: 100%; text-overflow: ellipsis; }
   resize: vertical;
 }
 #expensesTable .exp-name { overflow-wrap: anywhere; }
+
+/* Step 2 <-> Step 4 insurance link */
+.ins-link-hint { margin: 0 0 12px; padding: 8px 12px; font-size: 0.9rem; color: var(--color-primary-dark); background: rgba(0,0,0,0.03); border-radius: 8px; }
+.exp-link-note { margin-top: 4px; font-size: 0.8rem; color: var(--color-primary-dark); opacity: 0.85; }
+#expensesTable tr.exp-linked-lock .cell-fixed-monthly { background: rgba(0,0,0,0.04); cursor: not-allowed; }

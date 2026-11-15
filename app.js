@@ -977,7 +977,7 @@ document.addEventListener('DOMContentLoaded', () => {
     { key: 'food',       icon: '🛒', title: 'מזון וקניות',            hint: 'קניות לבית, מסעדות ומשלוחים' },
     { key: 'kids',       icon: '👶', title: 'ילדים וחינוך',           hint: 'מסגרות, חוגים וכל הוצאה שוטפת על הילדים (אין ילדים? אפשר לדלג)' },
     { key: 'health',     icon: '🩺', title: 'בריאות ורפואה',          hint: 'תרופות, רופאים פרטיים, שיניים וטיפולים' },
-    { key: 'insurance',  icon: '🛡️', title: 'ביטוחים',                hint: 'ביטוחי חיים, בריאות (משלים ופרטי), אובדן כושר עבודה וסיעוד (ביטוח רכב ודירה נמצאים בנושאים שלהם)' },
+    { key: 'insurance',  icon: '🛡️', title: 'ביטוחים',                hint: 'ביטוחי חיים, בריאות (משלים ופרטי), אובדן כושר עבודה וסיעוד. מה שתרשמו כאן יופיע אוטומטית גם בשלב 4 (ביטוח רכב ודירה נמצאים בנושאים שלהם)' },
     { key: 'tech',       icon: '📱', title: 'תקשורת וטכנולוגיה',      hint: 'טלפון, אינטרנט, טלוויזיה, מנויים וציוד אלקטרוני' },
     { key: 'debts',      icon: '💳', title: 'הלוואות והתחייבויות',    hint: 'החזרים חודשיים על הלוואות, חובות וריבית (משכנתא נמצאת בדיור)' },
     { key: 'leisure',    icon: '🌴', title: 'פנאי, בילויים וחופשות',  hint: 'חופשות, בילויים, תחביבים ומנויי ספורט' },
@@ -1180,6 +1180,178 @@ document.addEventListener('DOMContentLoaded', () => {
     delete row.dataset.stashedMonths;
   }
 
+
+  // --- Step 2 <-> Step 4 link: insurance premiums are typed ONCE, and appear in both places -----------------
+  // Expense row  <->  insurance row (type + coverage).  Rules (the last edit always wins):
+  //   * no insurance row with a premium  -> typing the amount in step 2 creates / fills the row in step 4
+  //   * exactly one row                   -> both sides mirror each other
+  //   * several rows of the same kind      -> step 2 shows their sum and is locked (edit in step 4)
+  // "Accidents" and "critical illness" have no expense row, so they are not linked.
+  const INSURANCE_LINK_SPEC = {
+    life_insurance:       { type: 'חיים' },
+    health_supplementary: { type: 'בריאות', cov: 'supplementary' },
+    health_private:       { type: 'בריאות', cov: 'private' },
+    disability_insurance: { type: 'אובדן כושר עבודה' },
+    ltc_insurance:        { type: 'סיעוד' }
+  };
+  const INSURANCE_LINK_IDS = Object.keys(INSURANCE_LINK_SPEC);
+  let insuranceLinkBusy = false;
+  let insuranceLinkPrev = null;
+  const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+  function insuranceRowCategory(row) {
+    const t = row.querySelector('.cell-type')?.value;
+    if (t === 'חיים') return 'life_insurance';
+    if (t === 'סיעוד') return 'ltc_insurance';
+    if (t === 'אובדן כושר עבודה') return 'disability_insurance';
+    if (t === 'בריאות') return row.querySelector('.cell-cov-type')?.value === 'supplementary' ? 'health_supplementary' : 'health_private';
+    return null; // accidents / critical illness: no expense row
+  }
+  function insuranceLinkState() {
+    const st = {};
+    INSURANCE_LINK_IDS.forEach(id => { st[id] = { rows: [], filled: [], empty: [], count: 0, sum: 0 }; });
+    document.querySelectorAll('#insurancesTable tbody tr').forEach(r => {
+      const id = insuranceRowCategory(r);
+      if (!id) return;
+      const prem = parseNumber(r.querySelector('.cell-premium')?.value);
+      st[id].rows.push(r);
+      if (prem > 0) { st[id].filled.push(r); st[id].count++; st[id].sum += prem; } else { st[id].empty.push(r); }
+    });
+    INSURANCE_LINK_IDS.forEach(id => { st[id].sum = round2(st[id].sum); });
+    return st;
+  }
+  function expenseRowById(id) {
+    return document.querySelector(`#expensesTable tbody tr.exp-row[data-category-id="${id}"]`);
+  }
+  function setInsurancePremium(row, v) {
+    const input = row.querySelector('.cell-premium');
+    if (input) input.value = v === '' ? '' : formatNumberWithCommas(String(round2(v)));
+  }
+  function insuranceRowIsOtherwiseEmpty(row) {
+    return ['.cell-company', '.cell-sum-insured', '.cell-agent'].every(c => String(row.querySelector(c)?.value || '').trim() === '');
+  }
+  // Step 2 side: show an amount as a fixed monthly standing order (months are stashed, nothing is lost)
+  function setExpenseFixedAmount(row, amount) {
+    const typeSel = row.querySelector('.cell-expense-type');
+    const chk = row.querySelector('.cell-is-fixed');
+    const fx = row.querySelector('.cell-fixed-monthly');
+    if (!typeSel || !chk || !fx) return;
+    if (!expenseRowIsFixed(row)) {
+      typeSel.value = 'standing_order';
+      chk.checked = true;
+      engageExpenseFixed(row);
+    }
+    fx.value = formatNumberWithCommas(String(round2(amount)));
+    syncExpenseRow(row);
+  }
+  function clearExpenseRow(row) {
+    const typeSel = row.querySelector('.cell-expense-type');
+    const chk = row.querySelector('.cell-is-fixed');
+    const fx = row.querySelector('.cell-fixed-monthly');
+    if (fx) fx.value = '';
+    delete row.dataset.stashedMonths;
+    if (chk && chk.checked) { chk.checked = false; releaseExpenseFixed(row); }
+    ['.cell-month1', '.cell-month2', '.cell-month3'].forEach(c => { const i = row.querySelector(c); if (i) i.value = ''; });
+    if (typeSel) typeSel.value = 'variable';
+    syncExpenseRow(row);
+  }
+  function createOrFillInsuranceRow(id, st, amount) {
+    const spec = INSURANCE_LINK_SPEC[id];
+    const target = st[id].empty[0];
+    if (target) { setInsurancePremium(target, amount); return; }
+    addTableRow('insurancesTable', { type: spec.type, cov_type: spec.cov || 'private', premium: String(round2(amount)) });
+  }
+  function refreshInsuranceLinkUI(st) {
+    INSURANCE_LINK_IDS.forEach(id => {
+      const E = expenseRowById(id);
+      if (!E) return;
+      const n = st[id].count;
+      const locked = n >= 2;
+      const fx = E.querySelector('.cell-fixed-monthly');
+      const chk = E.querySelector('.cell-is-fixed');
+      const typeSel = E.querySelector('.cell-expense-type');
+      if (fx) fx.readOnly = locked;
+      if (chk) chk.disabled = locked;
+      if (typeSel) typeSel.disabled = locked;
+      E.classList.toggle('exp-linked-lock', locked);
+      let note = E.querySelector('.exp-link-note');
+      if (n >= 1) {
+        if (!note) {
+          note = document.createElement('div');
+          note.className = 'exp-link-note';
+          E.querySelector('.exp-name')?.after(note);
+        }
+        note.textContent = locked
+          ? `🔗 סכום של ${n} פוליסות משלב 4 – לשינוי היכנסו לשלב 4`
+          : '🔗 מחובר לביטוחים בשלב 4 – שינוי כאן יתעדכן גם שם';
+      } else if (note) {
+        note.remove();
+      }
+    });
+  }
+  // source: 'ins' (step 4 changed) | 'exp' (an expense row changed, cid = its category) | 'init' (after load: fill the missing side only)
+  function reconcileInsuranceLinks(source, cid) {
+    if (insuranceLinkBusy) return;
+    insuranceLinkBusy = true;
+    try {
+      const st = insuranceLinkState();
+      const prev = insuranceLinkPrev || {};
+      INSURANCE_LINK_IDS.forEach(id => {
+        if (source === 'exp' && id !== cid) return;
+        const E = expenseRowById(id);
+        if (!E) return;
+        const s = st[id];
+        const avg = round2(expenseRowAvg(E));
+        if (source === 'ins') {
+          if (s.count >= 1) {
+            if (!(expenseRowIsFixed(E) && Math.abs(avg - s.sum) < 0.005)) setExpenseFixedAmount(E, s.sum);
+          } else if (prev[id] && prev[id].count >= 1 && Math.abs(avg - prev[id].sum) < 0.005) {
+            clearExpenseRow(E);
+          }
+        } else if (source === 'exp') {
+          if (s.count === 0) {
+            if (avg > 0) createOrFillInsuranceRow(id, st, avg);
+          } else if (s.count === 1) {
+            const r = s.filled[0];
+            if (avg > 0) setInsurancePremium(r, avg);
+            else { setInsurancePremium(r, ''); if (insuranceRowIsOtherwiseEmpty(r)) r.remove(); }
+          } else {
+            setExpenseFixedAmount(E, s.sum); // locked: always the sum of the policies
+          }
+        } else { // init
+          if (s.count >= 1 && avg === 0) setExpenseFixedAmount(E, s.sum);
+          else if (s.count === 0 && avg > 0) createOrFillInsuranceRow(id, st, avg);
+        }
+      });
+      const after = insuranceLinkState();
+      insuranceLinkPrev = {};
+      INSURANCE_LINK_IDS.forEach(id => { insuranceLinkPrev[id] = { count: after[id].count, sum: after[id].sum }; });
+      refreshInsuranceLinkUI(after);
+    } finally {
+      insuranceLinkBusy = false;
+    }
+    updateComputedExpensesTotal();
+    if (source !== 'init') saveDraft();
+  }
+  // One delegated listener for both tables
+  ['input', 'change'].forEach(evt => {
+    document.addEventListener(evt, (e) => {
+      const t = e.target;
+      if (!t || !t.closest || insuranceLinkBusy) return;
+      const insRow = t.closest('#insurancesTable tbody tr');
+      if (insRow) {
+        if (t.matches('.cell-premium, .cell-type, .cell-cov-type')) reconcileInsuranceLinks('ins');
+        return;
+      }
+      const expRow = t.closest('#expensesTable tbody tr.exp-row');
+      if (expRow && INSURANCE_LINK_SPEC[expRow.dataset.categoryId]
+          && t.matches('.cell-month1, .cell-month2, .cell-month3, .cell-fixed-monthly, .cell-is-fixed, .cell-expense-type')) {
+        // the row's own handlers (fixed / type) run first, then we mirror
+        setTimeout(() => reconcileInsuranceLinks('exp', expRow.dataset.categoryId), 0);
+      }
+    });
+  });
+
   // --- Collapse / search view -------------------------------------------------------------------------------
   function resizeExpenseTextareas(scope) {
     scope.querySelectorAll('textarea').forEach(t => {
@@ -1342,7 +1514,9 @@ document.addEventListener('DOMContentLoaded', () => {
       row.style.transform = 'scale(0.95)';
       row.style.opacity = '0';
       setTimeout(() => {
+        const wasInsurance = !!row.closest('#insurancesTable');
         row.remove();
+        if (wasInsurance) reconcileInsuranceLinks('ins');
         refreshPropertyOptions();
         saveDraft();
         updateLiveFinancialKPIs();
@@ -1667,6 +1841,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         toggleConditionalFields();
         updateComputedExpensesTotal();
+        reconcileInsuranceLinks('init');
         updateLiveFinancialKPIs();
         collectQualityFlags();
 
@@ -2347,6 +2522,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       toggleConditionalFields();
       updateComputedExpensesTotal();
+      reconcileInsuranceLinks('init');
       updateLiveFinancialKPIs();
 
       const savedVisited = localStorage.getItem('financial_questionnaire_visited_steps');
@@ -3239,6 +3415,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Check conditional visibility on load
   toggleConditionalFields();
   updateComputedExpensesTotal();
+  reconcileInsuranceLinks('init');
   updateLiveFinancialKPIs();
 
   // Validate all steps to color indicators on start
