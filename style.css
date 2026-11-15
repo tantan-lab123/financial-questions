@@ -2453,3 +2453,189 @@ select { max-width: 100%; text-overflow: ellipsis; }
 @media (max-width: 600px) {
   .form-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ==========================================================================
+   Expenses (Step 2): collapsible groups, fixed categories, overview
+   ========================================================================== */
+.exp-hide { display: none !important; }
+#expensesTable tbody tr.exp-closed,
+#expensesTable tbody tr.exp-hidden { display: none !important; }
+
+.exp-howto {
+  margin: 14px 0 6px;
+  padding: 12px 16px;
+  background: var(--color-primary-soft);
+  border: 1px solid #d1fae5;
+  border-radius: var(--radius-md);
+  color: var(--color-primary-dark);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+/* Overview: cards + bars */
+.exp-overview {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  margin: 16px 0 22px;
+  box-shadow: var(--shadow-sm);
+}
+.exp-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.exp-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: #f8fafc;
+  min-width: 0;
+}
+.exp-kpi-main {
+  background: linear-gradient(135deg, var(--color-primary-dark), var(--color-primary));
+  border-color: transparent;
+  color: #fff;
+}
+.exp-kpi-label { font-size: 0.82rem; font-weight: 600; color: var(--color-text-muted); }
+.exp-kpi-main .exp-kpi-label { color: rgba(255, 255, 255, 0.85); }
+.exp-kpi-val { font-size: 1.35rem; font-weight: 700; color: var(--color-accent-brown); direction: ltr; text-align: right; }
+.exp-kpi-main .exp-kpi-val { color: #fff; font-size: 1.55rem; }
+.exp-kpi-hint { font-size: 0.74rem; color: var(--color-text-muted); }
+
+.exp-chart { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+.exp-chart-title { font-weight: 700; color: var(--color-primary-dark); margin-bottom: 4px; }
+.exp-chart-empty { color: var(--color-text-muted); font-size: 0.9rem; text-align: center; padding: 8px 0; }
+.exp-bar-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 210px) 1fr minmax(120px, auto);
+  align-items: center;
+  gap: 10px;
+  font-size: 0.88rem;
+}
+.exp-bar-name { font-weight: 600; color: var(--color-text-main); }
+.exp-bar-track { height: 12px; background: #eef2f7; border-radius: 8px; overflow: hidden; }
+.exp-bar-fill { display: block; height: 100%; background: linear-gradient(90deg, var(--color-primary), var(--color-primary-light)); border-radius: 8px; transition: width 0.3s ease; }
+.exp-bar-val { color: var(--color-text-muted); text-align: left; white-space: nowrap; direction: rtl; }
+
+.exp-toggle-all { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Group header row */
+#expensesTable tbody tr.exp-group-row td { padding: 0; border-bottom: 0; }
+#expensesTable tbody tr.exp-group-row:hover { background: transparent; }
+.exp-group-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 8px 0 2px;
+  padding: 13px 16px;
+  background: var(--color-primary-soft);
+  border: 1px solid #d1fae5;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  cursor: pointer;
+  text-align: right;
+  font-family: var(--font-family);
+  color: var(--color-text-main);
+  transition: var(--transition-normal);
+}
+.exp-group-btn:hover { border-color: var(--color-primary-light); background: #e6fbef; }
+.exp-group-btn:focus-visible { outline: 3px solid rgba(5, 150, 105, 0.35); outline-offset: 2px; }
+.exp-g-icon { font-size: 1.5rem; flex: none; }
+.exp-g-text { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.exp-g-text strong { font-size: 1.02rem; color: var(--color-primary-dark); }
+.exp-g-text small { color: var(--color-text-muted); font-size: 0.8rem; line-height: 1.4; }
+.exp-g-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
+.exp-g-status { font-size: 0.75rem; color: var(--color-text-muted); }
+.exp-group-row.exp-g-filled .exp-g-status { color: var(--color-primary); font-weight: 600; }
+.exp-g-total { font-weight: 700; color: var(--color-accent-brown); font-size: 1rem; }
+.exp-g-chevron { flex: none; color: var(--color-primary); transition: transform 0.2s ease; font-size: 1.1rem; }
+.exp-group-row.open .exp-g-chevron,
+.exp-group-row.exp-searching .exp-g-chevron { transform: rotate(180deg); }
+.exp-group-row.open .exp-group-btn { background: #ecfdf5; border-color: var(--color-primary-light); }
+
+/* Category rows */
+.exp-name { font-weight: 600; color: var(--color-text-main); line-height: 1.4; }
+.exp-row-other .exp-name { font-weight: 500; color: var(--color-text-muted); }
+#expensesTable textarea.cell-notes { min-height: 38px; }
+.col-exp-type { width: 150px; min-width: 140px; }
+.exp-pct { font-size: 0.74rem; color: var(--color-text-muted); margin-top: 3px; min-height: 1em; }
+.input-readonly.exp-avg-zero { color: var(--color-text-muted) !important; font-weight: 400; }
+#expensesTable td input.input-readonly[readonly] { cursor: not-allowed; }
+
+.exp-fixed-box {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--color-primary-soft);
+  border: 1px solid #d1fae5;
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+.exp-fixed-check { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; line-height: 1.4; }
+.dynamic-table td .exp-fixed-check input[type="checkbox"] { width: 18px; height: 18px; flex: none; margin-top: 1px; padding: 0; }
+.exp-fixed-amount { margin-top: 8px; }
+.exp-fixed-amount label { display: block; font-weight: 600; color: var(--color-primary-dark); margin-bottom: 4px; }
+
+/* Footer totals */
+#expensesTable tfoot td {
+  padding: 12px 14px;
+  background: var(--color-primary-soft);
+  border-top: 2px solid #d1fae5;
+  color: var(--color-primary-dark);
+}
+
+@media (max-width: 768px) {
+  .exp-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .exp-kpi-main { grid-column: 1 / -1; }
+  .exp-bar-row { grid-template-columns: 1fr; gap: 4px; }
+  .exp-bar-val { text-align: right; }
+  .exp-g-text small { display: none; }
+
+  #expensesTable tbody tr.exp-group-row {
+    display: block;
+    padding: 0;
+    margin-bottom: 6px;
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+  #expensesTable tbody tr.exp-group-row td { grid-column: auto; padding: 0; }
+  #expensesTable tbody tr.exp-row td:nth-child(5),
+  #expensesTable tbody tr.exp-row td:nth-child(6),
+  #expensesTable tbody tr.exp-row td:nth-child(7) { grid-column: 1 / -1; }
+  #expensesTable tbody tr.exp-row td:nth-child(1) .exp-name { font-size: 1rem; }
+
+  #expensesTable tfoot { display: block; }
+  #expensesTable tfoot tr {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px 8px;
+    padding: 10px 12px;
+    background: var(--color-primary-soft);
+    border: 1px solid #d1fae5;
+    border-radius: var(--radius-md);
+  }
+  #expensesTable tfoot td { display: block; padding: 2px 0; border: 0; background: none; }
+  #expensesTable tfoot td:first-child { grid-column: 1 / -1; font-weight: 700; }
+  #expensesTable tfoot td:nth-child(5) { grid-column: 1 / -1; }
+  #expensesTable tfoot td:nth-child(n+6) { display: none; }
+  #expensesTable tfoot td[data-label]::before { content: attr(data-label); display: block; font-size: 0.75rem; color: var(--color-text-muted); }
+}
+
+@media (min-width: 769px) {
+  #expensesTable { min-width: 820px; }
+  #expensesTable thead th,
+  #expensesTable tbody tr.exp-row td,
+  #expensesTable tfoot td { padding: 10px 7px; }
+  #expensesTable thead th:first-child,
+  #expensesTable tbody tr.exp-row td:first-child { width: 225px; min-width: 205px; }
+  #expensesTable .col-exp-type { width: 158px; min-width: 148px; }
+  #expensesTable td.col-exp-type select { font-size: 0.82rem; padding-inline: 4px; }
+  #expensesTable tbody tr.exp-row td input,
+  #expensesTable tbody tr.exp-row td textarea { padding: 7px 8px; }
+}

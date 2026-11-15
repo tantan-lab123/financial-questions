@@ -502,30 +502,48 @@
               <span><strong>איך משיגים ריכוז הוצאות מדויק?</strong> מומלץ להיכנס לאתר הבנק שלכם ולאתרי חברות כרטיסי האשראי, ולהפיק דו"ח ריכוז הוצאות או פירוט תנועות של 3 החודשים האחרונים. רוב הבנקים וחברות האשראי מציגים כיום באזור האישי כלים אוטומטיים וגרפים המנתחים ומחלקים את ההוצאות שלכם לפי קטגוריות באופן אוטומטי.</span>
             </div>
             
-            <div class="table-header">
-              <h3>פירוט הוצאות המשפחה (ממוצע 3 חודשים אחרונים)</h3>
-              <button type="button" class="btn-secondary add-row-btn" data-table="expensesTable">
-                <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                הוסף סעיף הוצאה
-              </button>
+            <div class="exp-howto">
+              ההוצאות מחולקות ל-12 נושאים. <strong>פותחים רק את הנושאים שרלוונטיים לכם</strong> (אפשר לפתוח כמה נושאים במקביל), ממלאים סכומים, וסוגרים נושא כשמסיימים. סעיף שלא רלוונטי – משאירים ריק, והוא ייספר כ-0 ₪. לא בטוחים באיזה נושא להכניס הוצאה? יש שורת "אחר" בסוף כל נושא, ובנושא האחרון שורה כללית.
             </div>
 
-            <!-- Expenses Filter and Search Bar -->
+            <!-- Expenses overview: cards + breakdown by group (filled by app.js) -->
+            <div class="exp-overview" id="expOverview" aria-live="polite">
+              <div class="exp-kpis">
+                <div class="exp-kpi exp-kpi-main">
+                  <span class="exp-kpi-label">הוצאות חודשיות ממוצעות</span>
+                  <span class="exp-kpi-val" id="expKpiAvg">0 ₪</span>
+                </div>
+                <div class="exp-kpi">
+                  <span class="exp-kpi-label">סך הוצאות קבועות</span>
+                  <span class="exp-kpi-val" id="expKpiFixed">0 ₪</span>
+                  <span class="exp-kpi-hint">שאינן בהוראת קבע</span>
+                </div>
+                <div class="exp-kpi">
+                  <span class="exp-kpi-label">סך הוצאות משתנות</span>
+                  <span class="exp-kpi-val" id="expKpiVariable">0 ₪</span>
+                </div>
+                <div class="exp-kpi">
+                  <span class="exp-kpi-label">סך הוראות קבע</span>
+                  <span class="exp-kpi-val" id="expKpiStanding">0 ₪</span>
+                </div>
+              </div>
+              <div class="exp-chart" id="expChart"></div>
+            </div>
+
+            <div class="table-header">
+              <h3>פירוט הוצאות המשפחה (ממוצע 3 חודשים אחרונים)</h3>
+            </div>
+
+            <!-- Expenses search + open/close all -->
             <div class="expenses-filter-bar">
               <div class="search-box">
                 <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                 <input type="text" id="expenseSearchInput" placeholder="חיפוש מהיר של סעיף הוצאה (לדוגמה: ארנונה, דלק, ביטוח)...">
                 <button type="button" id="clearExpenseSearch" class="btn-clear-search hidden">&times;</button>
               </div>
-              <div class="category-tabs" id="expenseCategoryTabs">
-                <button type="button" class="cat-pill active" data-cat="all">הכל (35)</button>
-                <button type="button" class="cat-pill" data-cat="housing">דיור ואחזקה</button>
-                <button type="button" class="cat-pill" data-cat="transport">רכב ותחבורה</button>
-                <button type="button" class="cat-pill" data-cat="kids">ילדים וחינוך</button>
-                <button type="button" class="cat-pill" data-cat="food">מזון ומחיה</button>
-                <button type="button" class="cat-pill" data-cat="leisure">פנאי ונופש</button>
-                <button type="button" class="cat-pill" data-cat="finance">ביטוח ופיננסים</button>
-                <button type="button" class="cat-pill" data-cat="other">שונות</button>
+              <div class="exp-toggle-all">
+                <button type="button" class="cat-pill" id="expOpenAll">פתח את כל הנושאים</button>
+                <button type="button" class="cat-pill" id="expCloseAll">סגור את כל הנושאים</button>
               </div>
             </div>
             <div class="responsive-table-wrapper">
@@ -538,12 +556,23 @@
                     <th>חודש 3 (ש"ח)</th>
                     <th>ממוצע (ש"ח)</th>
                     <th>הערות</th>
-                    <th class="col-actions">פעולות</th>
+                    <th class="col-exp-type">סוג הוצאה</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <!-- Rows added dynamically -->
+                  <!-- Groups and fixed category rows are built by app.js -->
                 </tbody>
+                <tfoot>
+                  <tr class="exp-total-row">
+                    <td>סה"כ הוצאות חודשיות</td>
+                    <td data-label="חודש 1"><strong id="expMonthTotal1">0</strong></td>
+                    <td data-label="חודש 2"><strong id="expMonthTotal2">0</strong></td>
+                    <td data-label="חודש 3"><strong id="expMonthTotal3">0</strong></td>
+                    <td data-label="ממוצע"><strong id="expMonthTotalAvg">0</strong></td>
+                    <td></td>
+                    <td></td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
             <div class="table-total-bar">

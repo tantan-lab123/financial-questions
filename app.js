@@ -64,7 +64,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // Expenses Filter
   const expenseSearchInput = document.getElementById('expenseSearchInput');
   const clearExpenseSearch = document.getElementById('clearExpenseSearch');
-  const expenseCategoryTabs = document.getElementById('expenseCategoryTabs');
 
   // Sticky Step Sidebar Elements
   const stepSidebar = document.getElementById('stepSidebar');
@@ -478,7 +477,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const p2Income = partner2 ? income(2) : 0;
     const additionalIncome = sumCells('#additionalIncomeTable tbody tr', '.cell-amount');
     const monthlyIncome = p1Income + p2Income + additionalIncome;
-    const monthlyExpenses = sumCells('#expensesTable tbody tr', '.cell-average');
+    const expTotals = computeExpenseTotals();
+    const monthlyExpenses = expTotals.total;
 
     const realEstate = Array.from(document.querySelectorAll('#realEstateTable tbody tr')).map(r => ({
       id: r.dataset.rowId,
@@ -517,13 +517,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const loansMonthly = sumCells('#liabilitiesTable tbody tr', '.cell-monthly');
 
     const r = (v) => Math.round(v);
+    const r2 = (v) => Math.round(v * 100) / 100;
     return {
       monthly_income: r(monthlyIncome),
       monthly_income_partner1: r(p1Income),
       monthly_income_partner2: r(p2Income),
       monthly_additional_income: r(additionalIncome),
-      monthly_expenses: r(monthlyExpenses),
-      free_cashflow: r(monthlyIncome) - r(monthlyExpenses),
+      monthly_expenses: r2(monthlyExpenses),
+      monthly_expenses_fixed: r2(expTotals.byType.fixed_annual),
+      monthly_expenses_variable: r2(expTotals.byType.variable),
+      monthly_expenses_standing_order: r2(expTotals.byType.standing_order),
+      free_cashflow: r2(r(monthlyIncome) - monthlyExpenses),
       real_estate_value: r(realEstateValue),
       vehicles_value: r(vehiclesValue),
       financial_assets_value: r(financialAssetsValue),
@@ -541,8 +545,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- DATA QUALITY: impossible / suspicious values are flagged (never blocked) ---
   function expenseAverageById(id) {
-    const row = Array.from(document.querySelectorAll('#expensesTable tbody tr')).find(r => r.dataset.categoryId === id);
-    return row ? parseNumber(row.querySelector('.cell-average')?.value) : 0;
+    const row = Array.from(document.querySelectorAll('#expensesTable tbody tr.exp-row')).find(r => r.dataset.categoryId === id);
+    return row ? expenseRowAvg(row) : 0;
   }
 
   function setRowWarning(row, message) {
@@ -923,16 +927,33 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
     `,
     expensesTable: () => `
-      <td><textarea class="cell-category" rows="1" placeholder="סעיף הוצאה" required></textarea></td>
+      <td>
+        <div class="exp-name"></div>
+        <div class="exp-fixed-box exp-hide">
+          <label class="exp-fixed-check">
+            <input type="checkbox" class="cell-is-fixed">
+            <span>הוצאה קבועה לאורך כל השנה – אינה משתנה מחודש לחודש</span>
+          </label>
+          <div class="exp-fixed-amount exp-hide">
+            <label>סכום חודשי קבוע (ש"ח) – מזינים פעם אחת בלבד</label>
+            <input type="number" class="cell-fixed-monthly" min="0" placeholder="0">
+          </div>
+        </div>
+      </td>
       <td><input type="number" class="cell-month1" min="0" placeholder="0"></td>
       <td><input type="number" class="cell-month2" min="0" placeholder="0"></td>
       <td><input type="number" class="cell-month3" min="0" placeholder="0"></td>
-      <td><input type="text" inputmode="numeric" data-original-type="number" class="cell-average input-readonly" readonly placeholder="0"></td>
+      <td>
+        <input type="text" inputmode="numeric" data-original-type="number" class="cell-average input-readonly" readonly placeholder="0" tabindex="-1">
+        <div class="exp-pct"></div>
+      </td>
       <td><textarea class="cell-notes" rows="1" placeholder="הערות"></textarea></td>
-      <td class="col-actions">
-        <button type="button" class="btn-delete remove-row-btn" title="הסר שורה">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-        </button>
+      <td class="col-exp-type">
+        <select class="cell-expense-type" aria-label="סוג הוצאה">
+          <option value="variable">הוצאה משתנה</option>
+          <option value="standing_order">הוראת קבע</option>
+          <option value="fixed_annual">הוצאה קבועה שנתית</option>
+        </select>
       </td>
     `
   };
@@ -946,98 +967,288 @@ document.addEventListener('DOMContentLoaded', () => {
     return options;
   }
 
-  const DEFAULT_EXPENSES_LIST = [
-    'משכנתא', 'הלוואות', 'ביטוח בריאות משלים', 'ביטוח בריאות פרטי', 'ביטוח חיים', 'ביטוח דירה',
-    'הקצאה להוצאות בלת"מ', 'חיסכון', 'מזון ומכולת', 'ביגוד והנעלה', 'חשמל', 'גז',
-    'ארנונה ומים', 'מטפלת/שמרטף/מעון/גן', 'ביה"ס וחומרי לימוד', 'חוגים', 'דמי כיס',
-    'טלפון קווי', 'טלפון סלולרי', 'אינטרנט', 'שכ"ד', 'וועד בית', 'עוזרת',
-    'אחזקת בית ותיקונים', 'תחבורה ציבורית', 'דלק', 'אחזקת רכב ותיקונים', 'ביטוח (חובה ומקיף)',
-    'טסט', 'עמלות וריבית', 'מספרה', 'קוסמטיקה', 'כבלים', 'מנויים', 'עיתונים',
-    'נסיעות לחו"ל וחופשות', 'קאנטרי קלאב', 'מסעדות סרטים והצגות', 'מתנות (משפחה, אירועים)',
-    'מזונות', 'תמיכה בבני המשפחה', 'הוצאות ריפוי', 'סיגריות', 'מזומן ללא מעקב'
+  // ==========================================================================
+  // EXPENSES: 12 fixed groups (collapsible) with fixed, locked categories.
+  // The client may only enter amounts / notes / expense type - never rename, add or delete categories.
+  // IDs of the original categories are kept, so old drafts and old submissions still map 1:1.
+  // ==========================================================================
+  const EXPENSE_GROUPS = [
+    { key: 'housing',    icon: '🏠', title: 'דיור ומשק בית',          hint: 'משכנתא או שכירות, חשבונות הבית, תחזוקה וניקיון' },
+    { key: 'transport',  icon: '🚗', title: 'תחבורה ורכב',            hint: 'דלק, ביטוח וטיפולים לרכב, תחבורה ציבורית' },
+    { key: 'food',       icon: '🛒', title: 'מזון וקניות',            hint: 'קניות לבית, מסעדות ומשלוחים' },
+    { key: 'kids',       icon: '👶', title: 'ילדים וחינוך',           hint: 'מסגרות, חוגים וכל הוצאה שוטפת על הילדים (אין ילדים? אפשר לדלג)' },
+    { key: 'health',     icon: '🩺', title: 'בריאות ורפואה',          hint: 'ביטוחי בריאות, תרופות, רופאים וטיפולים' },
+    { key: 'insurance',  icon: '🛡️', title: 'ביטוחים',                hint: 'ביטוחי חיים, אובדן כושר עבודה וסיעוד (ביטוח רכב, דירה ובריאות נמצאים בנושאים שלהם)' },
+    { key: 'tech',       icon: '📱', title: 'תקשורת וטכנולוגיה',      hint: 'טלפון, אינטרנט, טלוויזיה, מנויים וציוד אלקטרוני' },
+    { key: 'debts',      icon: '💳', title: 'הלוואות והתחייבויות',    hint: 'החזרים חודשיים על הלוואות, חובות וריבית (משכנתא נמצאת בדיור)' },
+    { key: 'leisure',    icon: '🌴', title: 'פנאי, בילויים וחופשות',  hint: 'חופשות, בילויים, תחביבים ומנויי ספורט' },
+    { key: 'clothing',   icon: '👗', title: 'ביגוד וטיפוח',           hint: 'ביגוד והנעלה, מספרה, קוסמטיקה והיגיינה' },
+    { key: 'savings',    icon: '💰', title: 'חיסכון והוצאות פיננסיות', hint: 'חיסכון והשקעות, ייעוץ והנהלת חשבונות' },
+    { key: 'other',      icon: '📦', title: 'הוצאות נוספות',          hint: 'מתנות, תרומות, חיות מחמד, והוצאות שלא מצאתם להן מקום' }
   ];
 
-  const EXPENSE_CATEGORY_MAP = {
-    'משכנתא': 'housing',
-    'משכתנתא': 'housing',
-    'שכ"ד': 'housing',
-    'חשמל': 'housing',
-    'גז': 'housing',
-    'ארנונה ומים': 'housing',
-    'וועד בית': 'housing',
-    'עוזרת': 'housing',
-    'אחזקת בית ותיקונים': 'housing',
-    'אינטרנט': 'housing',
-    'טלפון קווי': 'housing',
-    'טלפון סלולרי': 'housing',
-    'דלק': 'transport',
-    'תחבורה ציבורית': 'transport',
-    'אחזקת רכב ותיקונים': 'transport',
-    'ביטוח (חובה ומקיף)': 'transport',
-    'טסט': 'transport',
-    'מטפלת/שמרטף/מעון/גן': 'kids',
-    'ביה"ס וחומרי לימוד': 'kids',
-    'חוגים': 'kids',
-    'דמי כיס': 'kids',
-    'מזון ומכולת': 'food',
-    'ביגוד והנעלה': 'food',
-    'מספרה': 'food',
-    'קוסמטיקה': 'food',
-    'סיגריות': 'food',
-    'נסיעות לחו"ל וחופשות': 'leisure',
-    'קאנטרי קלאב': 'leisure',
-    'מסעדות סרטים והצגות': 'leisure',
-    'כבלים': 'leisure',
-    'מנויים': 'leisure',
-    'עיתונים': 'leisure',
-    'ביטוח בריאות משלים': 'finance',
-    'ביטוח בריאות פרטי': 'finance',
-    'ביטוח חיים': 'finance',
-    'ביטוח דירה': 'finance',
-    'הלוואות': 'finance',
-    'עמלות וריבית': 'finance',
-    'חיסכון': 'finance',
-    'הקצאה להוצאות בלת"מ': 'finance',
-    'מתנות (משפחה, אירועים)': 'other',
-    'מזונות': 'other',
-    'תמיכה בבני המשפחה': 'other',
-    'הוצאות ריפוי': 'other',
-    'מזומן ללא מעקב': 'other'
-  };
+  const EXPENSE_ITEMS = [
+    // housing
+    { id: 'mortgage', label: 'משכנתא', group: 'housing' },
+    { id: 'rent', label: 'שכ"ד', group: 'housing' },
+    { id: 'building_committee', label: 'וועד בית', group: 'housing' },
+    { id: 'property_tax_water', label: 'ארנונה ומים', group: 'housing' },
+    { id: 'electricity', label: 'חשמל', group: 'housing' },
+    { id: 'gas', label: 'גז', group: 'housing' },
+    { id: 'home_maintenance', label: 'אחזקת בית ותיקונים', group: 'housing' },
+    { id: 'cleaner', label: 'עוזרת', group: 'housing' },
+    { id: 'home_insurance', label: 'ביטוח דירה', group: 'housing' },
+    // transport
+    { id: 'fuel', label: 'דלק', group: 'transport' },
+    { id: 'car_insurance', label: 'ביטוח (חובה ומקיף)', group: 'transport' },
+    { id: 'car_test', label: 'טסט', group: 'transport' },
+    { id: 'car_maintenance', label: 'אחזקת רכב ותיקונים', group: 'transport' },
+    { id: 'public_transport', label: 'תחבורה ציבורית', group: 'transport' },
+    { id: 'parking_tolls_taxi', label: 'חניה, כבישי אגרה ומוניות', group: 'transport' },
+    { id: 'car_lease', label: 'ליסינג או הלוואת רכב', group: 'transport' },
+    // food
+    { id: 'groceries', label: 'מזון ומכולת', group: 'food' },
+    { id: 'dining_entertainment', label: 'מסעדות, בתי קפה ומשלוחים', group: 'food' },
+    // kids
+    { id: 'childcare', label: 'מטפלת/שמרטף/מעון/גן', group: 'kids' },
+    { id: 'school', label: 'ביה"ס וחומרי לימוד', group: 'kids' },
+    { id: 'classes', label: 'חוגים', group: 'kids' },
+    { id: 'kids_afterschool', label: 'צהרונים, קייטנות ושיעורים פרטיים', group: 'kids' },
+    { id: 'kids_clothing_toys', label: 'ביגוד, הנעלה, צעצועים וציוד לילדים', group: 'kids' },
+    { id: 'pocket_money', label: 'דמי כיס', group: 'kids' },
+    // health
+    { id: 'health_supplementary', label: 'ביטוח בריאות משלים', group: 'health' },
+    { id: 'health_private', label: 'ביטוח בריאות פרטי', group: 'health' },
+    { id: 'medical', label: 'הוצאות ריפוי (תרופות, רופאים, משקפיים)', group: 'health' },
+    { id: 'dental', label: 'טיפולי שיניים', group: 'health' },
+    { id: 'therapy', label: 'טיפולים רגשיים ופרא-רפואיים', group: 'health' },
+    // insurance
+    { id: 'life_insurance', label: 'ביטוח חיים', group: 'insurance' },
+    { id: 'disability_insurance', label: 'ביטוח אובדן כושר עבודה', group: 'insurance' },
+    { id: 'ltc_insurance', label: 'ביטוח סיעודי', group: 'insurance' },
+    // tech
+    { id: 'landline', label: 'טלפון קווי', group: 'tech' },
+    { id: 'mobile', label: 'טלפון סלולרי', group: 'tech' },
+    { id: 'internet', label: 'אינטרנט', group: 'tech' },
+    { id: 'tv_cable', label: 'כבלים', group: 'tech' },
+    { id: 'subscriptions', label: 'מנויים וסטרימינג', group: 'tech' },
+    { id: 'newspapers', label: 'עיתונים', group: 'tech' },
+    { id: 'electronics', label: 'רכישת ציוד אלקטרוני', group: 'tech' },
+    // debts
+    { id: 'loans', label: 'הלוואות', group: 'debts' },
+    { id: 'fees_interest', label: 'עמלות וריבית', group: 'debts' },
+    // leisure
+    { id: 'vacations', label: 'נסיעות לחו"ל וחופשות', group: 'leisure' },
+    { id: 'gym', label: 'קאנטרי קלאב', group: 'leisure' },
+    { id: 'entertainment', label: 'קולנוע, הופעות, בילויים ותחביבים', group: 'leisure' },
+    // clothing
+    { id: 'clothing', label: 'ביגוד והנעלה', group: 'clothing' },
+    { id: 'hairdresser', label: 'מספרה', group: 'clothing' },
+    { id: 'cosmetics', label: 'קוסמטיקה והיגיינה', group: 'clothing' },
+    // savings
+    { id: 'savings', label: 'חיסכון', group: 'savings' },
+    { id: 'unexpected_reserve', label: 'הקצאה להוצאות בלת"מ', group: 'savings' },
+    { id: 'investments', label: 'הפקדות להשקעות ולפנסיה עצמאית', group: 'savings' },
+    { id: 'advisory', label: 'ייעוץ מקצועי והנהלת חשבונות', group: 'savings' },
+    // other
+    { id: 'gifts', label: 'מתנות (משפחה, אירועים)', group: 'other' },
+    { id: 'alimony', label: 'מזונות', group: 'other' },
+    { id: 'family_support', label: 'תמיכה בבני המשפחה', group: 'other' },
+    { id: 'donations', label: 'תרומות וצדקה', group: 'other' },
+    { id: 'pets', label: 'חיות מחמד', group: 'other' },
+    { id: 'cigarettes', label: 'סיגריות', group: 'other' },
+    { id: 'untracked_cash', label: 'מזומן ללא מעקב', group: 'other' }
+  ];
+  // Every group ends with a fixed "other" row (name locked, free-text notes)
+  EXPENSE_GROUPS.forEach(g => {
+    const isLast = g.key === 'other';
+    EXPENSE_ITEMS.push({
+      id: `other_${g.key}`,
+      label: isLast ? 'אחר – לא בטוחים באיזה נושא? רשמו כאן (פרטו בהערות)' : 'אחר (פרטו בהערות)',
+      group: g.key,
+      isOther: true
+    });
+  });
+  // Items ordered group by group (the table is rendered in this order)
+  const EXPENSE_ITEMS_ORDERED = [];
+  EXPENSE_GROUPS.forEach(g => EXPENSE_ITEMS.filter(i => i.group === g.key).forEach(i => EXPENSE_ITEMS_ORDERED.push(i)));
+  const EXPENSE_ITEM_BY_ID = {};
+  EXPENSE_ITEMS.forEach(i => { EXPENSE_ITEM_BY_ID[i.id] = i; });
+  const EXPENSE_GROUP_BY_KEY = {};
+  EXPENSE_GROUPS.forEach(g => { EXPENSE_GROUP_BY_KEY[g.key] = g; });
+  // Old 7-group keys (before the 12-group structure) -> new group
+  const LEGACY_GROUP_MAP = { housing: 'housing', transport: 'transport', kids: 'kids', food: 'food', leisure: 'leisure', finance: 'savings', other: 'other' };
+  const EXPENSE_TYPES = ['variable', 'standing_order', 'fixed_annual'];
 
-  function getExpenseCategory(categoryName) {
-    if (!categoryName) return 'other';
-    const trimmed = categoryName.trim();
-    if (EXPENSE_CATEGORY_MAP[trimmed]) return EXPENSE_CATEGORY_MAP[trimmed];
-    for (const [key, cat] of Object.entries(EXPENSE_CATEGORY_MAP)) {
-      if (trimmed.includes(key) || key.includes(trimmed)) return cat;
-    }
-    return 'other';
+  // Finds the fixed category an old draft / file row belongs to. Unknown (client-typed) rows -> null.
+  function resolveExpenseItem(item) {
+    if (item.category_id && EXPENSE_ITEM_BY_ID[item.category_id]) return EXPENSE_ITEM_BY_ID[item.category_id];
+    const label = LEGACY_EXPENSE_LABELS[item.category] || item.category;
+    const id = EXPENSE_IDS[label];
+    if (id && EXPENSE_ITEM_BY_ID[id]) return EXPENSE_ITEM_BY_ID[id];
+    const byLabel = EXPENSE_ITEMS.find(i => !i.isOther && i.label === label);
+    return byLabel || null;
   }
 
-  function filterExpenses() {
-    const activeCat = expenseCategoryTabs?.querySelector('.cat-pill.active')?.getAttribute('data-cat') || 'all';
-    const query = expenseSearchInput?.value.trim().toLowerCase() || '';
-
-    const rows = document.querySelectorAll('#expensesTable tbody tr');
-    rows.forEach(row => {
-      const rowCat = row.getAttribute('data-category') || 'other';
-      const categoryInput = row.querySelector('.cell-category');
-      const catText = (categoryInput ? categoryInput.value : '').toLowerCase();
-
-      const matchesCat = (activeCat === 'all') || (rowCat === activeCat);
-      const matchesQuery = !query || catText.includes(query);
-
-      if (matchesCat && matchesQuery) {
-        row.style.display = '';
-      } else {
-        row.style.display = 'none';
-      }
-    });
-
-    if (clearExpenseSearch) {
-      clearExpenseSearch.classList.toggle('hidden', !query);
+  // Which "other" row receives a row that no longer exists as a category?
+  function guessExpenseGroup(item) {
+    const name = String(item.category || '').trim();
+    if (name.length >= 2) {
+      const hit = EXPENSE_ITEMS.find(i => !i.isOther && (i.label.includes(name) || name.includes(i.label)));
+      if (hit) return hit.group;
     }
+    if (item.category_group && EXPENSE_GROUP_BY_KEY[item.category_group] && item.category_id !== 'custom') return item.category_group;
+    return LEGACY_GROUP_MAP[item.category_group] || 'other';
+  }
+
+  // --- Per-row calculation: the single source of truth for expenses -------------------------------------------
+  function expenseRowType(row) {
+    const v = row.querySelector('.cell-expense-type')?.value;
+    return EXPENSE_TYPES.includes(v) ? v : 'variable';
+  }
+  function expenseRowIsFixed(row) {
+    return expenseRowType(row) !== 'variable' && !!row.querySelector('.cell-is-fixed')?.checked;
+  }
+  // The three months. A fixed expense is entered once and counted in all three months. Empty = 0.
+  function expenseRowMonths(row) {
+    if (expenseRowIsFixed(row)) {
+      const f = parseNumber(row.querySelector('.cell-fixed-monthly')?.value);
+      return [f, f, f];
+    }
+    return ['.cell-month1', '.cell-month2', '.cell-month3'].map(c => parseNumber(row.querySelector(c)?.value));
+  }
+  // Average is ALWAYS sum / 3 (empty month or a 0 are the same thing).
+  function expenseRowAvg(row) {
+    const m = expenseRowMonths(row);
+    return (m[0] + m[1] + m[2]) / 3;
+  }
+  function expenseRowHasEntry(row) {
+    if (expenseRowIsFixed(row)) return String(row.querySelector('.cell-fixed-monthly')?.value || '').trim() !== '';
+    return ['.cell-month1', '.cell-month2', '.cell-month3'].some(c => String(row.querySelector(c)?.value || '').trim() !== '');
+  }
+  function computeExpenseTotals() {
+    const out = { total: 0, byType: { variable: 0, standing_order: 0, fixed_annual: 0 }, byGroup: {}, months: [0, 0, 0] };
+    document.querySelectorAll('#expensesTable tbody tr.exp-row').forEach(row => {
+      const m = expenseRowMonths(row);
+      const avg = (m[0] + m[1] + m[2]) / 3;
+      out.total += avg;
+      out.byType[expenseRowType(row)] += avg;
+      const g = row.dataset.group;
+      out.byGroup[g] = (out.byGroup[g] || 0) + avg;
+      for (let i = 0; i < 3; i++) out.months[i] += m[i];
+    });
+    return out;
+  }
+  // 3333.333 -> "3,333.33", 6000 -> "6,000"
+  function fmtMoney(n) {
+    const v = Math.round((Number(n) || 0) * 100) / 100;
+    return formatNumberWithCommas(String(v));
+  }
+
+  // Applies the fixed / not-fixed state of a row to the screen (months locked + filled from the single amount)
+  function syncExpenseRow(row) {
+    const type = expenseRowType(row);
+    const chk = row.querySelector('.cell-is-fixed');
+    const box = row.querySelector('.exp-fixed-box');
+    const amountWrap = row.querySelector('.exp-fixed-amount');
+    const canBeFixed = type !== 'variable';
+    if (!canBeFixed && chk) chk.checked = false;
+    box?.classList.toggle('exp-hide', !canBeFixed);
+    const fixed = canBeFixed && !!chk?.checked;
+    amountWrap?.classList.toggle('exp-hide', !fixed);
+    const fixedVal = row.querySelector('.cell-fixed-monthly')?.value;
+    ['.cell-month1', '.cell-month2', '.cell-month3'].forEach(c => {
+      const input = row.querySelector(c);
+      if (!input) return;
+      input.readOnly = fixed;
+      input.classList.toggle('input-readonly', fixed);
+      input.tabIndex = fixed ? -1 : 0;
+      if (fixed) input.value = String(fixedVal || '').trim() === '' ? '' : formatNumberWithCommas(cleanCommas(fixedVal));
+    });
+    row.classList.toggle('exp-row-fixed', fixed);
+  }
+
+  // Switching to "fixed all year": the typed months are kept aside, so a mistaken click loses nothing
+  function engageExpenseFixed(row) {
+    const months = ['.cell-month1', '.cell-month2', '.cell-month3'].map(c => row.querySelector(c)?.value || '');
+    row.dataset.stashedMonths = JSON.stringify(months);
+    const fixedInput = row.querySelector('.cell-fixed-monthly');
+    if (fixedInput && String(fixedInput.value).trim() === '') {
+      const nums = months.map(v => cleanCommas(v));
+      if (nums[0] !== '' && nums[0] === nums[1] && nums[1] === nums[2]) fixedInput.value = formatNumberWithCommas(nums[0]);
+    }
+  }
+  // Switching back: restore what was typed before; if nothing was, the fixed amount stays in each month (editable)
+  function releaseExpenseFixed(row) {
+    const fixedVal = row.querySelector('.cell-fixed-monthly')?.value || '';
+    let months = null;
+    try { months = JSON.parse(row.dataset.stashedMonths || 'null'); } catch (e) { months = null; }
+    const hasStash = Array.isArray(months) && months.some(v => String(v).trim() !== '');
+    ['.cell-month1', '.cell-month2', '.cell-month3'].forEach((c, i) => {
+      const input = row.querySelector(c);
+      if (input) input.value = hasStash ? months[i] : fixedVal;
+    });
+    delete row.dataset.stashedMonths;
+  }
+
+  // --- Collapse / search view -------------------------------------------------------------------------------
+  function resizeExpenseTextareas(scope) {
+    scope.querySelectorAll('textarea').forEach(t => {
+      t.style.height = 'auto';
+      t.style.height = t.scrollHeight + 'px';
+    });
+  }
+  function setExpenseGroupOpen(groupRow, open) {
+    groupRow.classList.toggle('open', open);
+    groupRow.querySelector('.exp-group-btn')?.setAttribute('aria-expanded', String(open));
+    applyExpenseView();
+    if (open) {
+      const rows = Array.from(document.querySelectorAll(`#expensesTable tbody tr.exp-row[data-group="${groupRow.dataset.group}"]`));
+      rows.forEach(r => resizeExpenseTextareas(r));
+    }
+  }
+  function applyExpenseView() {
+    const query = expenseSearchInput?.value.trim().toLowerCase() || '';
+    const searching = query !== '';
+    const groupHasMatch = {};
+    document.querySelectorAll('#expensesTable tbody tr.exp-row').forEach(row => {
+      const g = row.dataset.group;
+      const name = (row.querySelector('.exp-name')?.textContent || '').toLowerCase();
+      const groupTitle = (EXPENSE_GROUP_BY_KEY[g]?.title || '').toLowerCase();
+      const match = !searching || name.includes(query) || groupTitle.includes(query);
+      const open = document.querySelector(`#expensesTable tr.exp-group-row[data-group="${g}"]`)?.classList.contains('open');
+      row.classList.toggle('exp-hidden', searching && !match);
+      row.classList.toggle('exp-closed', !searching && !open);
+      if (match) groupHasMatch[g] = true;
+    });
+    document.querySelectorAll('#expensesTable tr.exp-group-row').forEach(gr => {
+      gr.classList.toggle('exp-hidden', searching && !groupHasMatch[gr.dataset.group]);
+      gr.classList.toggle('exp-searching', searching && !!groupHasMatch[gr.dataset.group]);
+    });
+    if (searching) {
+      document.querySelectorAll('#expensesTable tbody tr.exp-row:not(.exp-hidden)').forEach(r => resizeExpenseTextareas(r));
+    }
+    if (clearExpenseSearch) clearExpenseSearch.classList.toggle('hidden', !searching);
+  }
+  function filterExpenses() { applyExpenseView(); }
+
+  function buildExpenseGroupRow(g) {
+    const tr = document.createElement('tr');
+    tr.className = 'exp-group-row';
+    tr.dataset.group = g.key;
+    tr.innerHTML = `
+      <td colspan="7">
+        <button type="button" class="exp-group-btn" aria-expanded="false">
+          <span class="exp-g-icon" aria-hidden="true">${g.icon}</span>
+          <span class="exp-g-text"><strong>${g.title}</strong><small>${g.hint}</small></span>
+          <span class="exp-g-meta">
+            <span class="exp-g-status"></span>
+            <span class="exp-g-total">0 ₪</span>
+          </span>
+          <span class="exp-g-chevron" aria-hidden="true">▾</span>
+        </button>
+      </td>`;
+    return tr;
   }
 
   function initializeExpensesTable(expensesDraft = null) {
@@ -1045,12 +1256,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!tbody) return;
     tbody.innerHTML = '';
 
-    const rowMap = {};
-    DEFAULT_EXPENSES_LIST.forEach(category => {
-      const row = addTableRow('expensesTable', { category: category });
-      rowMap[category] = row;
+    // 1) Fixed structure: group header + its fixed category rows
+    const rowById = {};
+    EXPENSE_GROUPS.forEach(g => {
+      tbody.appendChild(buildExpenseGroupRow(g));
+      EXPENSE_ITEMS_ORDERED.filter(i => i.group === g.key).forEach(item => {
+        rowById[item.id] = addTableRow('expensesTable', { category_id: item.id });
+      });
     });
 
+    // 2) Old format (a single object) is kept as a note in the general "other" row
     let expensesArray = [];
     if (expensesDraft) {
       if (Array.isArray(expensesDraft)) {
@@ -1064,33 +1279,49 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    // 3) Fill amounts into the fixed categories. A row whose category no longer exists goes into the
+    //    "other" row of the closest group (amounts are added, the old name goes into the notes) - nothing is lost.
     expensesArray.forEach(item => {
-      if (!item || !item.category) return;
-      const category = LEGACY_EXPENSE_LABELS[item.category] || item.category;
-      const existingRow = rowMap[category];
-      if (existingRow) {
-        Object.keys(item).forEach(key => {
-          if (key === 'category' || item[key] === null || item[key] === undefined) return;
-          let input = existingRow.querySelector(`.cell-${key}`);
-          if (!input) {
-            const hyphenatedKey = key.replace(/_/g, '-');
-            input = existingRow.querySelector(`.cell-${hyphenatedKey}`);
-          }
-          if (input) {
-            if (input.type === 'checkbox') {
-              input.checked = item[key];
-            } else {
-              input.value = item[key];
-              if (input.getAttribute('data-original-type') === 'number' && shouldFormatField(key)) {
-                input.value = formatNumberWithCommas(item[key]);
-              }
-            }
-          }
-        });
+      if (!item || (!item.category && !item.category_id)) return;
+      const meta = resolveExpenseItem(item);
+      const target = meta ? rowById[meta.id] : rowById[`other_${guessExpenseGroup(item)}`];
+      if (!target) return;
+      const setVal = (selector, value) => {
+        const input = target.querySelector(selector);
+        if (!input || value === null || value === undefined) return;
+        input.value = (input.getAttribute('data-original-type') === 'number') ? formatNumberWithCommas(value) : value;
+      };
+      if (meta) {
+        ['month1', 'month2', 'month3'].forEach(m => setVal(`.cell-${m}`, item[m]));
+        setVal('.cell-notes', item.notes);
+        const type = EXPENSE_TYPES.includes(item.expense_type) ? item.expense_type : 'variable';
+        const typeSel = target.querySelector('.cell-expense-type');
+        if (typeSel) typeSel.value = type;
+        const chk = target.querySelector('.cell-is-fixed');
+        if (chk && type !== 'variable' && item.is_fixed === true) {
+          chk.checked = true;
+          setVal('.cell-fixed-monthly', item.fixed_monthly !== null && item.fixed_monthly !== undefined ? item.fixed_monthly : item.month1);
+        }
       } else {
-        addTableRow('expensesTable', item);
+        // merge into the "other" row
+        ['month1', 'month2', 'month3'].forEach(m => {
+          const input = target.querySelector(`.cell-${m}`);
+          const add = nz(item[m]);
+          if (!input || add === null) return;
+          const cur = nz(input.value) || 0;
+          input.value = formatNumberWithCommas(String(cur + add));
+        });
+        const notesEl = target.querySelector('.cell-notes');
+        if (notesEl) {
+          const extra = [item.category, item.notes].filter(Boolean).join(': ');
+          notesEl.value = [notesEl.value, extra].filter(Boolean).join(' | ');
+        }
       }
     });
+
+    tbody.querySelectorAll('tr.exp-row').forEach(syncExpenseRow);
+    applyExpenseView();
+    updateComputedExpensesTotal();
   }
 
   // --- INITIALIZE PAGE ---
@@ -1193,35 +1424,69 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateComputedExpensesTotal() {
     const table = document.getElementById('expensesTable');
     if (!table) return;
-    const rows = table.querySelectorAll('tbody tr');
-    let total = 0;
+    const rows = table.querySelectorAll('tbody tr.exp-row');
+    rows.forEach(syncExpenseRow);
+    const totals = computeExpenseTotals();
+    const total = totals.total;
+
+    // Per row: average (sum of 3 months / 3, empty = 0) and share of the total
+    const groupFilled = {};
     rows.forEach(row => {
-      const m1Val = row.querySelector('.cell-month1')?.value;
-      const m2Val = row.querySelector('.cell-month2')?.value;
-      const m3Val = row.querySelector('.cell-month3')?.value;
-
-      const m1 = parseNumber(m1Val);
-      const m2 = parseNumber(m2Val);
-      const m3 = parseNumber(m3Val);
-
-      let sum = 0;
-      let count = 0;
-
-      if (m1Val !== undefined && m1Val !== '' && !isNaN(m1)) { sum += m1; count++; }
-      if (m2Val !== undefined && m2Val !== '' && !isNaN(m2)) { sum += m2; count++; }
-      if (m3Val !== undefined && m3Val !== '' && !isNaN(m3)) { sum += m3; count++; }
-
-      const avg = count > 0 ? sum / count : 0;
-
+      const avg = expenseRowAvg(row);
       const avgInput = row.querySelector('.cell-average');
       if (avgInput) {
-        avgInput.value = count > 0 ? formatNumberWithCommas(Math.round(avg)) : '';
+        avgInput.value = fmtMoney(avg);
+        avgInput.classList.toggle('exp-avg-zero', avg === 0);
       }
-      total += avg;
+      const pct = row.querySelector('.exp-pct');
+      if (pct) pct.textContent = (total > 0 && avg > 0) ? `${(Math.round(avg / total * 1000) / 10).toLocaleString('he-IL')}% מהסך` : '';
+      row.classList.toggle('exp-row-filled', avg > 0 || expenseRowHasEntry(row));
+      if (expenseRowHasEntry(row) || avg > 0) groupFilled[row.dataset.group] = (groupFilled[row.dataset.group] || 0) + 1;
     });
-    const totalSpan = document.getElementById('computedTotalExpenses');
-    if (totalSpan) {
-      totalSpan.textContent = Math.round(total).toLocaleString('he-IL');
+
+    // Group headers: status + average + share
+    document.querySelectorAll('#expensesTable tr.exp-group-row').forEach(gr => {
+      const key = gr.dataset.group;
+      const sum = totals.byGroup[key] || 0;
+      const filled = groupFilled[key] || 0;
+      const status = gr.querySelector('.exp-g-status');
+      const totalEl = gr.querySelector('.exp-g-total');
+      if (status) status.textContent = filled > 0 ? `מולא ✓ (${filled})` : 'לא מולא';
+      if (totalEl) totalEl.textContent = `${Math.round(sum).toLocaleString('he-IL')} ₪`;
+      gr.classList.toggle('exp-g-filled', filled > 0);
+    });
+
+    // Footer totals (month 1..3 + average)
+    const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    setText('expMonthTotal1', fmtMoney(totals.months[0]));
+    setText('expMonthTotal2', fmtMoney(totals.months[1]));
+    setText('expMonthTotal3', fmtMoney(totals.months[2]));
+    setText('expMonthTotalAvg', fmtMoney(total));
+    setText('computedTotalExpenses', fmtMoney(total));
+
+    // Overview cards
+    setText('expKpiAvg', `${fmtMoney(total)} ₪`);
+    setText('expKpiFixed', `${fmtMoney(totals.byType.fixed_annual)} ₪`);
+    setText('expKpiVariable', `${fmtMoney(totals.byType.variable)} ₪`);
+    setText('expKpiStanding', `${fmtMoney(totals.byType.standing_order)} ₪`);
+
+    // Breakdown by group (bars)
+    const chart = document.getElementById('expChart');
+    if (chart) {
+      const items = EXPENSE_GROUPS.map(g => ({ g, v: totals.byGroup[g.key] || 0 })).filter(x => x.v > 0);
+      if (!items.length) {
+        chart.innerHTML = '<div class="exp-chart-empty">הזינו סכומים כדי לראות לאן הכסף שלכם הולך</div>';
+      } else {
+        const max = Math.max(...items.map(x => x.v));
+        chart.innerHTML = '<div class="exp-chart-title">חלוקת ההוצאות לפי נושאים</div>' + items.map(({ g, v }) => {
+          const pct = Math.round(v / total * 1000) / 10;
+          return `<div class="exp-bar-row">
+            <span class="exp-bar-name">${g.icon} ${g.title}</span>
+            <span class="exp-bar-track"><span class="exp-bar-fill" style="width:${Math.max(2, v / max * 100)}%"></span></span>
+            <span class="exp-bar-val">${Math.round(v).toLocaleString('he-IL')} ₪ · ${pct.toLocaleString('he-IL')}%</span>
+          </div>`;
+        }).join('');
+      }
     }
   }
 
@@ -1658,18 +1923,38 @@ document.addEventListener('DOMContentLoaded', () => {
       row.dataset.rowId = (initialData && initialData.id) || newRowId('re');
     }
 
-    // If this is the expenses table, assign category attribute
+    // Expenses table: the category is one of the FIXED categories (name is not editable)
     if (tableName === 'expensesTable') {
-      const initialCat = (initialData && initialData.category) ? (LEGACY_EXPENSE_LABELS[initialData.category] || initialData.category) : '';
-      row.setAttribute('data-category', getExpenseCategory(initialCat));
-      row.dataset.categoryId = (initialData && initialData.category_id) || EXPENSE_IDS[initialCat] || 'custom';
+      const meta = EXPENSE_ITEM_BY_ID[initialData && initialData.category_id];
+      if (!meta) { row.remove(); return null; }
+      row.classList.add('exp-row');
+      row.dataset.categoryId = meta.id;
+      row.dataset.group = meta.group;
+      row.setAttribute('data-category', meta.group);
+      row.querySelector('.exp-name').textContent = meta.label;
+      if (meta.isOther) row.classList.add('exp-row-other');
 
-      const catInput = row.querySelector('.cell-category');
-      if (catInput) {
-        catInput.addEventListener('input', () => {
-          row.setAttribute('data-category', getExpenseCategory(catInput.value));
-        });
-      }
+      const typeSel = row.querySelector('.cell-expense-type');
+      const chk = row.querySelector('.cell-is-fixed');
+      typeSel.addEventListener('change', () => {
+        if (typeSel.value === 'variable' && chk.checked) {
+          chk.checked = false;
+          releaseExpenseFixed(row);
+        }
+        syncExpenseRow(row);
+        updateComputedExpensesTotal();
+      });
+      chk.addEventListener('change', () => {
+        if (chk.checked) {
+          engageExpenseFixed(row);
+          syncExpenseRow(row);
+          row.querySelector('.cell-fixed-monthly')?.focus();
+        } else {
+          releaseExpenseFixed(row);
+          syncExpenseRow(row);
+        }
+        updateComputedExpensesTotal();
+      });
     }
 
     // Convert number inputs in the new row to text for comma formatting
@@ -1698,7 +1983,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    if (initialData) {
+    if (initialData && tableName !== 'expensesTable') {
       Object.keys(initialData).forEach(key => {
         if (initialData[key] === null || initialData[key] === undefined) return;
         let input = row.querySelector(`.cell-${key}`);
@@ -1733,7 +2018,7 @@ document.addEventListener('DOMContentLoaded', () => {
       lastCell.addEventListener('keydown', (e) => {
         if (e.key === 'Tab' && !e.shiftKey) {
           const tbody = row.parentElement;
-          if (tbody && row === tbody.lastElementChild) {
+          if (tableName !== 'expensesTable' && tbody && row === tbody.lastElementChild) {
             e.preventDefault();
             const newRow = addTableRow(tableName);
             saveDraft();
@@ -2175,7 +2460,7 @@ document.addEventListener('DOMContentLoaded', () => {
       income1: income(1),
       income2: partner2 ? income(2) : null,
       additional_income: serializeTable('additionalIncomeTable', ['source', 'amount', 'notes']),
-      expenses: serializeTable('expensesTable', ['category', 'month1', 'month2', 'month3', 'average', 'notes']),
+      expenses: serializeExpenses(),
       assets: {
         real_estate: serializeTable('realEstateTable', ['description', 'purchase_val', 'current_val', 'mortgage_orig', 'mortgage_rem', 'notes']),
         mortgages: serializeTable('mortgageTable', ['property_id', 'bank', 'track', 'orig', 'remaining', 'rate', 'end_date', 'monthly', 'notes']),
@@ -2308,6 +2593,38 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       }
     });
+  }
+
+  // Expenses payload: only rows that have an entry. Category name always comes from the fixed list (never from the DOM).
+  function serializeExpenses() {
+    const result = [];
+    document.querySelectorAll('#expensesTable tbody tr.exp-row').forEach(row => {
+      const meta = EXPENSE_ITEM_BY_ID[row.dataset.categoryId];
+      if (!meta) return;
+      const type = expenseRowType(row);
+      const fixed = expenseRowIsFixed(row);
+      const fixedAmount = nz(row.querySelector('.cell-fixed-monthly')?.value);
+      const notes = (row.querySelector('.cell-notes')?.value || '').trim();
+      const months = fixed
+        ? [fixedAmount, fixedAmount, fixedAmount]
+        : ['.cell-month1', '.cell-month2', '.cell-month3'].map(c => nz(row.querySelector(c)?.value));
+      const entered = months.some(m => m !== null) || notes !== '' || type !== 'variable';
+      if (!entered) return;
+      result.push({
+        category: meta.label,
+        month1: months[0],
+        month2: months[1],
+        month3: months[2],
+        average: Math.round(expenseRowAvg(row) * 100) / 100,
+        notes,
+        expense_type: type,
+        is_fixed: fixed,
+        fixed_monthly: fixed ? fixedAmount : null,
+        category_id: meta.id,
+        category_group: meta.group
+      });
+    });
+    return result;
   }
 
   function serializeTable(tableId, fieldClasses) {
@@ -2925,7 +3242,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // If no expenses rows exist, initialize the table
-  const expensesRows = document.querySelectorAll('#expensesTable tbody tr');
+  const expensesRows = document.querySelectorAll('#expensesTable tbody tr.exp-row');
   if (expensesRows.length === 0) {
     initializeExpensesTable();
   }
@@ -2975,30 +3292,38 @@ document.addEventListener('DOMContentLoaded', () => {
     prepChecklistCard?.classList.toggle('collapsed');
   });
 
-  // Setup Expenses Search and Category Filter Tabs
+  // Expenses: search + collapsible groups (any number of groups can be open at the same time)
   if (expenseSearchInput) {
-    expenseSearchInput.addEventListener('input', filterExpenses);
+    expenseSearchInput.addEventListener('input', applyExpenseView);
   }
   if (clearExpenseSearch) {
     clearExpenseSearch.addEventListener('click', () => {
       expenseSearchInput.value = '';
-      filterExpenses();
+      applyExpenseView();
       expenseSearchInput.focus();
     });
   }
-  if (expenseCategoryTabs) {
-    expenseCategoryTabs.querySelectorAll('.cat-pill').forEach(pill => {
-      pill.addEventListener('click', () => {
-        expenseCategoryTabs.querySelectorAll('.cat-pill').forEach(p => p.classList.remove('active'));
-        pill.classList.add('active');
-        filterExpenses();
-      });
+  document.getElementById('expensesTable')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.exp-group-btn');
+    if (!btn) return;
+    const groupRow = btn.closest('tr.exp-group-row');
+    setExpenseGroupOpen(groupRow, !groupRow.classList.contains('open'));
+  });
+  document.getElementById('expOpenAll')?.addEventListener('click', () => {
+    document.querySelectorAll('#expensesTable tr.exp-group-row').forEach(gr => {
+      gr.classList.add('open');
+      gr.querySelector('.exp-group-btn')?.setAttribute('aria-expanded', 'true');
     });
-  }
-
-  // Expense filter: show the real number of default rows
-  const allExpensesPill = expenseCategoryTabs?.querySelector('.cat-pill[data-cat="all"]');
-  if (allExpensesPill) allExpensesPill.textContent = `הכל (${DEFAULT_EXPENSES_LIST.length})`;
+    applyExpenseView();
+    resizeExpenseTextareas(document.getElementById('expensesTable'));
+  });
+  document.getElementById('expCloseAll')?.addEventListener('click', () => {
+    document.querySelectorAll('#expensesTable tr.exp-group-row').forEach(gr => {
+      gr.classList.remove('open');
+      gr.querySelector('.exp-group-btn')?.setAttribute('aria-expanded', 'false');
+    });
+    applyExpenseView();
+  });
 
   updatePartnerLabels();
   refreshPropertyOptions();
